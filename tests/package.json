@@ -10,6 +10,9 @@
   },
   "dependencies": {
     "@nexus/app": "workspace:*",
-    "@nexus/config": "workspace:*"
+    "@nexus/config": "workspace:*",
+    "@nexus/db": "workspace:*",
+    "@nexus/jobs": "workspace:*",
+    "@nexus/storage": "workspace:*"
   }
 }

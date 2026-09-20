@@ -3,6 +3,7 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   statSync,
@@ -74,6 +75,22 @@ export class CasStore implements BlobStore {
     const p = this.getPath(hash);
     if (!p) throw new Error(`CAS: blob not found for hash ${hash}`);
     return readFileSync(p);
+  }
+
+  /**
+   * Every blob hash in the store. Intended for integrity audits and for the
+   * (not yet implemented) garbage collector that reconciles stored blobs
+   * against the `artifacts` table — see GAP-7 in docs/plans/ISSUES.md.
+   */
+  list(): string[] {
+    const hashes: string[] = [];
+    for (const shard of readdirSync(this.root, { withFileTypes: true })) {
+      if (!shard.isDirectory() || !/^[0-9a-f]{2}$/.test(shard.name)) continue;
+      for (const entry of readdirSync(path.join(this.root, shard.name))) {
+        if (/^[0-9a-f]{64}$/.test(entry)) hashes.push(entry);
+      }
+    }
+    return hashes.sort();
   }
 
   /** Copy a blob out of the store to an arbitrary destination path. */

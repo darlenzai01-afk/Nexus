@@ -3,6 +3,8 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Db, SqlParam } from "./index.js";
 import {
   ArtifactMetaSchema,
+  ArtifactRefListSchema,
+  type ArtifactRef,
   OutlineSchema,
   ProjectConfigSchema,
   SceneDataSchema,
@@ -13,10 +15,12 @@ import {
 import {
   ApprovalDecisionSchema,
   ApprovalSubjectTypeSchema,
+  ErrorKindSchema,
   ArtifactKindSchema,
   ClaimStatusSchema,
   EpisodeKindSchema,
   EpisodeStateSchema,
+  JobLogLevelSchema,
   EnvVarNameSchema,
   JobStateSchema,
   MediaKindSchema,
@@ -38,6 +42,9 @@ import {
   type EpisodeKind,
   type EpisodeRow,
   type EpisodeState,
+  type ErrorKind,
+  type JobLogLevel,
+  type JobLogRow,
   type JobState,
   type JobStepRow,
   type MediaAssetRow,
@@ -178,6 +185,53 @@ export interface CreateJobInput {
   pipeline: string;
   /** Ordered step keys of the pipeline DAG (versioned in code). */
   steps: readonly string[];
+  /**
+   * Job-creation idempotency: submitting the same key twice returns the
+   * already-created job instead of running the pipeline a second time.
+   */
+  idempotencyKey?: string;
+  /** Claim ceiling before a job is failed as `exhausted` (default 3). */
+  maxAttempts?: number;
+}
+
+export interface CheckpointStepInput {
+  /** The stage fingerprint (identical inputs ⇒ identical hash ⇒ reusable). */
+  inputHash?: string;
+  output?: unknown;
+  artifacts?: readonly ArtifactRef[];
+  /** Set when the output was adopted from another completed run. */
+  reusedFrom?: { jobId: string; stepKey: string };
+}
+
+export interface FailJobInput {
+  error: string;
+  errorKind: ErrorKind;
+  failureStep?: string;
+}
+
+export interface RequeueJobInput {
+  /** Backoff before the job becomes claimable again (default: immediate). */
+  delayMs?: number;
+  error: string;
+  failureStep?: string;
+}
+
+export interface LogJobInput {
+  jobId: string;
+  stepKey?: string;
+  level?: JobLogLevel;
+  event: string;
+  message?: string;
+  data?: unknown;
+}
+
+/** A completed run of a stage, found by fingerprint — the reuse candidate. */
+export interface CompletedStageRun {
+  jobId: string;
+  stepKey: string;
+  output: string | null;
+  artifacts: ArtifactRef[];
+  finishedAt: string | null;
 }
 
 export interface ClaimJobInput {
@@ -683,13 +737,29 @@ export class Repo {
     if (new Set(input.steps).size !== input.steps.length) {
       throw new ValidationError("Invalid job: step keys must be unique");
     }
+    if (input.idempotencyKey !== undefined && !input.idempotencyKey.trim()) {
+      throw new ValidationError(
+        "Invalid job: idempotencyKey must be a non-empty string when provided",
+      );
+    }
+    const maxAttempts = input.maxAttempts ?? 3;
+    if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
+      throw new ValidationError("Invalid job: maxAttempts must be an integer >= 1");
+    }
+
+    // Duplicate submission: hand back the job that already exists.
+    if (input.idempotencyKey !== undefined) {
+      const existing = this.findJobByIdempotencyKey(input.idempotencyKey);
+      if (existing) return { job: existing, steps: this.listJobSteps(existing.id) };
+    }
+
     const id = randomUUID();
     const ts = nowIso();
     this.db.transaction(() => {
       this.db.run(
-        `INSERT INTO pipeline_jobs (id, episode_id, pipeline, state, waiting_gate, attempt, lease_owner, lease_expires_at, input_fingerprint, error, created_at, updated_at)
-         VALUES (?, ?, ?, 'PENDING', NULL, 0, NULL, NULL, NULL, NULL, ?, ?);`,
-        [id, input.episodeId, pipeline, ts, ts],
+        `INSERT INTO pipeline_jobs (id, episode_id, pipeline, state, waiting_gate, attempt, lease_owner, lease_expires_at, input_fingerprint, error, created_at, updated_at, idempotency_key, max_attempts, next_attempt_at, heartbeat_at, error_kind, failure_step)
+         VALUES (?, ?, ?, 'PENDING', NULL, 0, NULL, NULL, NULL, NULL, ?, ?, ?, ?, NULL, NULL, NULL, NULL);`,
+        [id, input.episodeId, pipeline, ts, ts, input.idempotencyKey ?? null, maxAttempts],
       );
       input.steps.forEach((stepKey, idx) => {
         if (!stepKey.trim()) throw new ValidationError("Invalid job: step keys must be non-empty");
@@ -721,11 +791,34 @@ export class Repo {
       : this.db.all<PipelineJobRow>("SELECT * FROM pipeline_jobs ORDER BY created_at;");
   }
 
+  findJobByIdempotencyKey(idempotencyKey: string): PipelineJobRow | undefined {
+    if (!idempotencyKey.trim()) throw new ValidationError("Invalid idempotency key");
+    return this.db.get<PipelineJobRow>("SELECT * FROM pipeline_jobs WHERE idempotency_key = ?;", [
+      idempotencyKey,
+    ]);
+  }
+
+  listJobsByState(states: readonly JobState[]): PipelineJobRow[] {
+    if (states.length === 0) return [];
+    const validated = states.map((state) => validate(JobStateSchema, state, "job state"));
+    const placeholders = validated.map(() => "?").join(", ");
+    return this.db.all<PipelineJobRow>(
+      `SELECT * FROM pipeline_jobs WHERE state IN (${placeholders}) ORDER BY created_at;`,
+      validated,
+    );
+  }
+
   listJobSteps(jobId: string): JobStepRow[] {
     return this.db.all<JobStepRow>(
       "SELECT * FROM pipeline_job_steps WHERE job_id = ? ORDER BY idx;",
       [jobId],
     );
+  }
+
+  requireStep(jobId: string, stepKey: string): JobStepRow {
+    const step = this.getJobStep(jobId, stepKey);
+    if (!step) throw new NotFoundError("job step", `${jobId}/${stepKey}`);
+    return step;
   }
 
   getJobStep(jobId: string, stepKey: string): JobStepRow | undefined {
@@ -748,18 +841,19 @@ export class Repo {
     return this.db.transaction(() => {
       const candidate = this.db.get<PipelineJobRow>(
         `SELECT * FROM pipeline_jobs
-          WHERE state = 'PENDING'
+          WHERE (state = 'PENDING' AND (next_attempt_at IS NULL OR next_attempt_at <= ?))
              OR (state = 'RUNNING' AND (lease_expires_at IS NULL OR lease_expires_at < ?))
           ORDER BY created_at, rowid
           LIMIT 1;`,
-        [now],
+        [now, now],
       );
       if (!candidate) return undefined;
       this.db.run(
         `UPDATE pipeline_jobs
-            SET state = 'RUNNING', lease_owner = ?, lease_expires_at = ?, attempt = attempt + 1, updated_at = ?
+            SET state = 'RUNNING', lease_owner = ?, lease_expires_at = ?, heartbeat_at = ?,
+                attempt = attempt + 1, updated_at = ?
           WHERE id = ?;`,
-        [input.owner, expires, now, candidate.id],
+        [input.owner, expires, now, now, candidate.id],
       );
       return this.requireJob(candidate.id);
     });
@@ -772,11 +866,11 @@ export class Repo {
         `Job ${jobId} is leased to '${job.lease_owner ?? "nobody"}', not '${owner}'`,
       );
     }
-    this.db.run("UPDATE pipeline_jobs SET lease_expires_at = ?, updated_at = ? WHERE id = ?;", [
-      new Date(Date.now() + leaseMs).toISOString(),
-      nowIso(),
-      jobId,
-    ]);
+    const now = nowIso();
+    this.db.run(
+      "UPDATE pipeline_jobs SET lease_expires_at = ?, heartbeat_at = ?, updated_at = ? WHERE id = ?;",
+      [new Date(Date.now() + leaseMs).toISOString(), now, now, jobId],
+    );
     return this.requireJob(jobId);
   }
 
@@ -789,9 +883,11 @@ export class Repo {
     const next = validate(JobStateSchema, state, "job state");
     const clearLease =
       next === "DONE" || next === "FAILED" || next === "CANCELED" || next === "WAITING_GATE";
+    // A scheduled retry only makes sense while PENDING; anything else clears it.
     this.db.run(
       `UPDATE pipeline_jobs
-          SET state = ?, waiting_gate = ?, error = ?, updated_at = ?
+          SET state = ?, waiting_gate = ?, error = ?, updated_at = ?,
+              next_attempt_at = ${next === "PENDING" ? "next_attempt_at" : "NULL"}
               ${clearLease ? ", lease_owner = NULL, lease_expires_at = NULL" : ""}
         WHERE id = ?;`,
       [next, options.gate ?? null, options.error ?? null, nowIso(), id],
@@ -799,39 +895,220 @@ export class Repo {
     return this.requireJob(id);
   }
 
+  /** Record the job-level input fingerprint (episode content + params). */
+  setJobInputFingerprint(id: string, fingerprint: string): PipelineJobRow {
+    this.requireJob(id);
+    if (!fingerprint.trim()) throw new ValidationError("Invalid input fingerprint");
+    this.db.run("UPDATE pipeline_jobs SET input_fingerprint = ?, updated_at = ? WHERE id = ?;", [
+      fingerprint,
+      nowIso(),
+      id,
+    ]);
+    return this.requireJob(id);
+  }
+
+  /** Terminal failure: attempts exhausted, permanent error, or operator cancel. */
+  failJob(id: string, input: FailJobInput): PipelineJobRow {
+    this.requireJob(id);
+    const kind = validate(ErrorKindSchema, input.errorKind, "error kind");
+    if (!input.error?.trim())
+      throw new ValidationError("Invalid failure: error message is required");
+    this.db.run(
+      `UPDATE pipeline_jobs
+          SET state = 'FAILED', error = ?, error_kind = ?, failure_step = ?, next_attempt_at = NULL,
+              lease_owner = NULL, lease_expires_at = NULL, updated_at = ?
+        WHERE id = ?;`,
+      [input.error, kind, input.failureStep ?? null, nowIso(), id],
+    );
+    return this.requireJob(id);
+  }
+
+  /** Schedule a retry: stays PENDING, becomes claimable again after the backoff. */
+  requeueJob(id: string, input: RequeueJobInput): PipelineJobRow {
+    this.requireJob(id);
+    if (!input.error?.trim())
+      throw new ValidationError("Invalid requeue: error message is required");
+    const nextAttempt = new Date(Date.now() + (input.delayMs ?? 0)).toISOString();
+    this.db.run(
+      `UPDATE pipeline_jobs
+          SET state = 'PENDING', error = ?, error_kind = 'retryable', failure_step = ?,
+              next_attempt_at = ?, lease_owner = NULL, lease_expires_at = NULL, updated_at = ?
+        WHERE id = ?;`,
+      [input.error, input.failureStep ?? null, nextAttempt, nowIso(), id],
+    );
+    return this.requireJob(id);
+  }
+
+  cancelJob(id: string, reason = "canceled by operator"): PipelineJobRow {
+    this.requireJob(id);
+    this.db.run(
+      `UPDATE pipeline_jobs
+          SET state = 'CANCELED', error = ?, error_kind = 'canceled', next_attempt_at = NULL,
+              lease_owner = NULL, lease_expires_at = NULL, updated_at = ?
+        WHERE id = ?;`,
+      [reason, nowIso(), id],
+    );
+    return this.requireJob(id);
+  }
+
+  /**
+   * Mark a stage as in flight (attempt + 1, `started_at` stamped). Re-entrant
+   * by design: a stage a crashed worker left in flight is simply started
+   * again, which is why `attempt` is the retry counter and the checkpoint
+   * (`state = 'DONE'` + matching `input_hash`) is the completion proof.
+   */
   startStep(jobId: string, stepKey: string): JobStepRow {
     this.requireJob(jobId);
     const step = this.getJobStep(jobId, stepKey);
     if (!step) throw new NotFoundError("job step", `${jobId}/${stepKey}`);
     this.db.run(
-      "UPDATE pipeline_job_steps SET state = 'PENDING', attempt = attempt + 1, started_at = ?, error = NULL WHERE job_id = ? AND step_key = ?;",
+      `UPDATE pipeline_job_steps
+          SET state = 'PENDING', attempt = attempt + 1, started_at = ?, error = NULL
+        WHERE job_id = ? AND step_key = ?;`,
       [nowIso(), jobId, stepKey],
     );
     return this.getJobStep(jobId, stepKey)!;
   }
 
-  /** Checkpoint a step: DONE with the input hash that produced this output. */
-  checkpointStep(
+  /**
+   * Park a stage at a human/external gate. The fingerprint of the content
+   * being gated is stored *before* parking, so an approval can be bound to
+   * exactly the version the operator saw (AD-08).
+   */
+  waitStep(
     jobId: string,
     stepKey: string,
-    input: { inputHash?: string; output?: unknown },
+    input: { gate: string; fingerprint: string },
   ): JobStepRow {
+    this.requireJob(jobId);
+    const step = this.getJobStep(jobId, stepKey);
+    if (!step) throw new NotFoundError("job step", `${jobId}/${stepKey}`);
+    if (!input.gate.trim()) throw new ValidationError("Invalid gate: name is required");
+    const fingerprint = validate(Sha256Schema, input.fingerprint, "gate fingerprint");
+    this.db.run(
+      `UPDATE pipeline_job_steps
+          SET state = 'WAITING', input_hash = ?, started_at = COALESCE(started_at, ?), error = NULL
+        WHERE job_id = ? AND step_key = ?;`,
+      [fingerprint, nowIso(), jobId, stepKey],
+    );
+    return this.getJobStep(jobId, stepKey)!;
+  }
+
+  /**
+   * Checkpoint a stage: DONE, with the fingerprint of the inputs that
+   * produced it and the artifact references it produced (bytes never enter
+   * the DB). Every referenced artifact must already be registered — a stage
+   * cannot claim an artifact the system does not know about.
+   */
+  checkpointStep(jobId: string, stepKey: string, input: CheckpointStepInput): JobStepRow {
     this.requireJob(jobId);
     if (!this.getJobStep(jobId, stepKey))
       throw new NotFoundError("job step", `${jobId}/${stepKey}`);
+    const artifacts = validate(ArtifactRefListSchema, input.artifacts ?? [], "step artifacts");
+    for (const artifact of artifacts) {
+      if (!this.getArtifact(artifact.hash)) {
+        throw new ValidationError(
+          `Invalid step ${jobId}/${stepKey}: artifact ${artifact.hash} is not registered in artifacts — register it before checkpointing`,
+        );
+      }
+    }
     this.db.run(
       `UPDATE pipeline_job_steps
-          SET state = 'DONE', input_hash = ?, output = ?, finished_at = ?, error = NULL
+          SET state = 'DONE', input_hash = ?, output = ?, artifacts = ?, finished_at = ?, error = NULL,
+              reused_from_job_id = ?, reused_from_step_key = ?
         WHERE job_id = ? AND step_key = ?;`,
       [
         input.inputHash ?? null,
         input.output === undefined ? null : JSON.stringify(input.output),
+        JSON.stringify(artifacts),
         nowIso(),
+        input.reusedFrom?.jobId ?? null,
+        input.reusedFrom?.stepKey ?? null,
         jobId,
         stepKey,
       ],
     );
     return this.getJobStep(jobId, stepKey)!;
+  }
+
+  /**
+   * Reuse lookup: find a completed run of this exact stage from these exact
+   * inputs. Canceled jobs do not donate artifacts; anything else may, because
+   * the output is content-addressed and its fingerprint matched.
+   */
+  findCompletedStageRun(
+    inputHash: string,
+    stepKey: string,
+    excludeJobId?: string,
+  ): CompletedStageRun | undefined {
+    const row = this.db.get<{
+      job_id: string;
+      step_key: string;
+      output: string | null;
+      artifacts: string;
+      finished_at: string | null;
+    }>(
+      `SELECT s.job_id, s.step_key, s.output, s.artifacts, s.finished_at
+         FROM pipeline_job_steps s
+         JOIN pipeline_jobs j ON j.id = s.job_id
+        WHERE s.input_hash = ? AND s.step_key = ? AND s.state = 'DONE'
+          AND j.state <> 'CANCELED' AND s.job_id <> ?
+        ORDER BY s.finished_at DESC
+        LIMIT 1;`,
+      [inputHash, stepKey, excludeJobId ?? ""],
+    );
+    if (!row) return undefined;
+    return {
+      jobId: row.job_id,
+      stepKey: row.step_key,
+      output: row.output,
+      artifacts: validate(ArtifactRefListSchema, JSON.parse(row.artifacts), "step artifacts"),
+      finishedAt: row.finished_at,
+    };
+  }
+
+  stepArtifacts(jobId: string, stepKey: string): ArtifactRef[] {
+    const step = this.getJobStep(jobId, stepKey);
+    if (!step) throw new NotFoundError("job step", `${jobId}/${stepKey}`);
+    return validate(ArtifactRefListSchema, JSON.parse(step.artifacts), "step artifacts");
+  }
+
+  // ── Job logs (append-only) ──────────────────────────────────────────────
+
+  logJob(input: LogJobInput): JobLogRow {
+    this.requireJob(input.jobId);
+    const level = validate(JobLogLevelSchema, input.level ?? "info", "log level");
+    if (!input.event?.trim()) throw new ValidationError("Invalid log entry: event is required");
+    const result = this.db.run(
+      `INSERT INTO job_logs (job_id, step_key, level, event, message, data, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?);`,
+      [
+        input.jobId,
+        input.stepKey ?? null,
+        level,
+        input.event,
+        input.message ?? "",
+        JSON.stringify(input.data ?? {}),
+        nowIso(),
+      ],
+    );
+    return this.db.get<JobLogRow>("SELECT * FROM job_logs WHERE id = ?;", [
+      Number(result.lastInsertRowid),
+    ])!;
+  }
+
+  /** Chronological logs; `limit` keeps the most recent entries in order. */
+  listJobLogs(jobId: string, options: { limit?: number; afterId?: number } = {}): JobLogRow[] {
+    const limit = options.limit ?? 200;
+    if (!Number.isInteger(limit) || limit < 1) {
+      throw new ValidationError("Invalid log query: limit must be an integer >= 1");
+    }
+    return this.db.all<JobLogRow>(
+      `SELECT * FROM (
+         SELECT * FROM job_logs WHERE job_id = ? AND id > ? ORDER BY id DESC LIMIT ?
+       ) ORDER BY id ASC;`,
+      [jobId, options.afterId ?? 0, limit],
+    );
   }
 
   failStep(jobId: string, stepKey: string, error: string): JobStepRow {
@@ -859,7 +1136,11 @@ export class Repo {
     this.db.transaction(() => {
       for (const step of steps.slice(index)) {
         this.db.run(
-          "UPDATE pipeline_job_steps SET state = 'PENDING', input_hash = NULL, output = NULL, error = NULL, started_at = NULL, finished_at = NULL WHERE job_id = ? AND step_key = ?;",
+          `UPDATE pipeline_job_steps
+              SET state = 'PENDING', input_hash = NULL, output = NULL, artifacts = '[]',
+                  reused_from_job_id = NULL, reused_from_step_key = NULL, error = NULL,
+                  started_at = NULL, finished_at = NULL
+            WHERE job_id = ? AND step_key = ?;`,
           [jobId, step.step_key],
         );
       }

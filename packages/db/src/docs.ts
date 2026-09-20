@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { ArtifactKindSchema, Sha256Schema } from "./types.js";
+
 /**
  * Schemas for the JSON documents stored in CAS artifacts and JSON columns.
  * These are the typed contracts pipeline stages exchange (discovery §5):
@@ -90,6 +92,23 @@ export const SceneDataSchema = z.object({
   paletteIndex: z.number().int().min(0).default(0),
 });
 export type SceneData = z.infer<typeof SceneDataSchema>;
+
+// ── Artifact references (pipeline_job_steps.artifacts) ───────────────────
+
+/**
+ * A pointer to an artifact, never the bytes. `role` describes what the
+ * artifact *is* to the producing stage (e.g. "master", "captions", "audio"),
+ * which keeps multi-output stages (render → video + thumbnail + captions)
+ * machine-readable for later stages and for the upload kit.
+ */
+export const ArtifactRefSchema = z.object({
+  hash: Sha256Schema,
+  kind: ArtifactKindSchema,
+  role: z.string().default(""),
+});
+export type ArtifactRef = z.infer<typeof ArtifactRefSchema>;
+
+export const ArtifactRefListSchema = z.array(ArtifactRefSchema).default([]);
 
 // ── Artifact metadata (artifacts.meta) ───────────────────────────────────
 

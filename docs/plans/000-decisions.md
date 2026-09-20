@@ -144,6 +144,20 @@ Temporal/Step Functions (can't self-host for $0; lock-in); cron-and-scripts
 **Consequences:** We own retry/backoff/lease code (small, well-understood).
 Revisit only if step-type count and fan-out grow dramatically (OD-6).
 
+> **Phase 3 amendment (implemented; one detail pending ratification, OD-10).**
+> The state machine is implemented as three explicit transition tables
+> (episode/job/stage) with `assert*` guards, and the "step skips when
+> `state=done` and `input_hash` matches" rule is generalised into a
+> **fingerprint-keyed reuse contract**: any job may adopt a completed stage's
+> artifacts when the *content* fingerprint matches, recording provenance
+> (`reused_from_job_id`) and auditing it. Provider/template configuration is
+> part of the fingerprint, so a provider swap invalidates what it produced.
+> Stage `RUNNING` is *derived* (job RUNNING + `started_at`) rather than stored,
+> because widening the Phase 2 CHECK constraint would require the table rebuild
+> that the safety rules forbid. Retries persist their backoff
+> (`next_attempt_at`), so a scheduled retry survives a restart. See
+> `docs/architecture/job-orchestration.md`.
+
 ---
 
 ## AD-06 — Provider abstraction with Fake and Manual implementations
@@ -210,6 +224,15 @@ makes the human gate meaningful rather than ceremonial.
 behavior, occasionally annoying — by design).
 
 ---
+
+> **Phase 3 amendment to AD-05 (reuse rule).** A stage whose output is
+> byte-identical by construction (same pipeline, same stage, same content
+> fingerprint, same cache-affecting config) is **never executed twice**. The
+> database, not the caller, is the arbiter: `findCompletedStageRun()` is queried
+> before every execution, artifacts are validated (registered + present in the
+> CAS) before adoption, and any doubt degrades to re-execution rather than a
+> phantom result. Human gates are excluded from reuse by design — an approval is
+> a per-episode decision, even for identical content.
 
 ## AD-09 — Content-addressed artifact store with license/provenance records
 

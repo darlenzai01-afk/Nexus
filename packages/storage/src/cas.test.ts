@@ -26,6 +26,7 @@ describe("CasStore", () => {
       cas.export(first.hash, dest);
       expect(readFileSync(dest)).toEqual(Buffer.from(data));
 
+      expect(cas.list()).toEqual([first.hash]);
       expect(cas.getPath("deadbeef")).toBeUndefined();
       expect(() => cas.read("deadbeef")).toThrow(/not found/);
 

@@ -32,6 +32,8 @@ packages/
                     # schemas, validated repository layer (no blobs, no secrets)
   storage/          # Content-addressed artifact store (sha256 CAS) behind a
                     # swappable interface — artifact bytes never enter the DB
+  jobs/             # Persistent job orchestration: state machines, stage graph,
+                    # fingerprints, retry/backoff, artifact reuse, worker loop
 services/           # Intentionally empty — no microservices (AD-01); see its README
 infrastructure/     # Deployment assets (systemd/Docker/litestream) — added in later phases
 tests/              # Cross-package integration tests (unit tests live beside sources)
@@ -101,21 +103,27 @@ binds to `127.0.0.1` by default — no public surface.
 
 ## Roadmap (from the approved plan)
 
-| Phase | Scope                                                       | State                               |
-| ----- | ----------------------------------------------------------- | ----------------------------------- |
-| 0     | Monorepo, config, tooling, CI, app/worker entrypoints       | **this repo** ✅                    |
-| 1     | Hard loop: script → scene graph → voice → captions → render | not started (blocked on OD-1, OD-2) |
-| 2     | Research + fact-check with claim/evidence traceability      | not started                         |
-| 3     | Full long-form pipeline + media/license engine              | not started                         |
-| 4     | Shorts pipeline (9:16 re-render from scene graph)           | not started                         |
-| 5     | Publishing (upload kit first, YouTube API after audit)      | not started                         |
+| Plan phase | Scope                                                       | State                                                   |
+| ---------- | ----------------------------------------------------------- | ------------------------------------------------------- |
+| 0          | Monorepo, config, tooling, CI, app/worker entrypoints       | ✅ delivered                                            |
+| —          | **Session 2:** domain schemas + persistence foundation      | ✅ delivered (`docs/architecture/domain-model.md`)      |
+| —          | **Session 3:** persistent job orchestration foundation      | ✅ delivered (`docs/architecture/job-orchestration.md`) |
+| 1          | Hard loop: script → scene graph → voice → captions → render | next (blocked on OD-1 Remotion, OD-2 TTS)               |
+| 2          | Research + fact-check with claim/evidence traceability      | pending                                                 |
+| 3          | Full long-form pipeline + media/license engine              | pending                                                 |
+| 4          | Shorts pipeline (9:16 re-render from scene graph)           | pending                                                 |
+| 5          | Publishing (upload kit first, YouTube API after audit)      | pending                                                 |
 
-**Session 2 deliverable (this branch):** the domain model + persistence
-foundation — versioned migrations, typed/validated schemas, resumable job
-state, provenance-tracked artifacts (CAS hashes, never blobs). It sits before
-plan-Phase 1 because every later step depends on typed artifacts and
-crash-resumable jobs. See
-[`docs/architecture/domain-model.md`](docs/architecture/domain-model.md).
+**Delivered so far on this branch:** (a) the domain model + persistence
+foundation — versioned migrations, typed/validated schemas, provenance-tracked
+artifacts (CAS hashes, never blobs) —
+[`docs/architecture/domain-model.md`](docs/architecture/domain-model.md); and
+(b) the persistent job orchestration foundation — three state machines, the
+versioned stage graph, content-fingerprint idempotency, retry/backoff, artifact
+reuse without re-execution, gates, job logs and the worker/task abstraction —
+[`docs/architecture/job-orchestration.md`](docs/architecture/job-orchestration.md).
+These sit before plan-Phase 1 because every later step depends on typed
+artifacts and crash-resumable, non-duplicating jobs.
 
 Open decisions that block Phase 1 (Remotion licensing, TTS provider) are
 tracked in [`docs/plans/000-decisions.md`](docs/plans/000-decisions.md#open-decisions-must-be-resolved-at-the-named-gate);

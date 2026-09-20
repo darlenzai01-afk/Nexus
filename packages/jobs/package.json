@@ -1,0 +1,21 @@
+{
+  "name": "@nexus/jobs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Persistent job orchestration (AD-05): state machines, stage graph, retry/backoff, checkpoint resume, artifact-reuse, worker/task abstraction.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean"
+  },
+  "dependencies": {
+    "@nexus/db": "workspace:*"
+  }
+}

@@ -14,6 +14,7 @@ export default defineConfig({
       "@nexus/config": resolveFromRoot("./packages/config/src/index.ts"),
       "@nexus/db": resolveFromRoot("./packages/db/src/index.ts"),
       "@nexus/storage": resolveFromRoot("./packages/storage/src/index.ts"),
+      "@nexus/jobs": resolveFromRoot("./packages/jobs/src/index.ts"),
     },
   },
   test: {

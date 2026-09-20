@@ -274,6 +274,49 @@ CREATE TABLE provider_call_log (
 CREATE INDEX idx_provider_call_log_provider_time ON provider_call_log(provider, created_at);
 `,
   },
+  {
+    id: "0002_job_orchestration",
+    sql: `
+-- Phase 3 — job orchestration. ADDITIVE ONLY: no table is rebuilt, no column
+-- is dropped, no data is touched (the episodes/pipeline_jobs CHECK lists stay
+-- exactly as shipped in 0001; new states are derived, never persisted).
+
+ALTER TABLE pipeline_jobs ADD COLUMN idempotency_key TEXT;
+ALTER TABLE pipeline_jobs ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 3;
+ALTER TABLE pipeline_jobs ADD COLUMN next_attempt_at TEXT;
+ALTER TABLE pipeline_jobs ADD COLUMN heartbeat_at TEXT;
+ALTER TABLE pipeline_jobs ADD COLUMN error_kind TEXT;
+ALTER TABLE pipeline_jobs ADD COLUMN failure_step TEXT;
+
+-- Job-creation idempotency: a duplicate submission (same episode + same
+-- versioned request) collapses onto the job that already exists.
+CREATE UNIQUE INDEX idx_pipeline_jobs_idempotency
+  ON pipeline_jobs(idempotency_key) WHERE idempotency_key IS NOT NULL;
+
+-- Artifact references + reuse provenance per completed stage. The step's
+-- input_hash IS the stage fingerprint (same inputs ⇒ same hash ⇒ reusable
+-- output), so no second fingerprint column is introduced.
+ALTER TABLE pipeline_job_steps ADD COLUMN artifacts TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE pipeline_job_steps ADD COLUMN reused_from_job_id TEXT;
+ALTER TABLE pipeline_job_steps ADD COLUMN reused_from_step_key TEXT;
+
+-- Reuse lookup: "has this exact stage already produced this exact output?"
+CREATE INDEX idx_job_steps_reuse ON pipeline_job_steps(input_hash, state);
+
+-- Append-only job log: operator-facing narrative + machine-readable events.
+CREATE TABLE job_logs (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id     TEXT NOT NULL REFERENCES pipeline_jobs(id) ON DELETE CASCADE,
+  step_key   TEXT,
+  level      TEXT NOT NULL CHECK (level IN ('debug', 'info', 'warn', 'error')),
+  event      TEXT NOT NULL CHECK (length(event) > 0),
+  message    TEXT NOT NULL DEFAULT '',
+  data       TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_job_logs_job ON job_logs(job_id, id);
+`,
+  },
 ];
 
 /** Tables created by the migrations (used by tests to detect accidental drift). */
@@ -294,4 +337,5 @@ export const EXPECTED_TABLES: readonly string[] = [
   "audit_log",
   "provider_accounts",
   "provider_call_log",
+  "job_logs",
 ];

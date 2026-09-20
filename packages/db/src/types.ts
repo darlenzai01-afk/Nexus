@@ -43,6 +43,12 @@ export const JobStateSchema = z.enum([
 ]);
 export type JobState = z.infer<typeof JobStateSchema>;
 
+/**
+ * Persisted stage progress. Note there is no RUNNING: a stage is "in flight"
+ * exactly when its job is RUNNING and the step is PENDING with a `started_at`
+ * stamp. Keeping the persisted set small means adding orchestration concepts
+ * never requires a table rebuild (SQLite cannot widen a CHECK in place).
+ */
 export const StepStateSchema = z.enum(["PENDING", "DONE", "FAILED", "WAITING"]);
 export type StepState = z.infer<typeof StepStateSchema>;
 
@@ -94,6 +100,24 @@ export type ApprovalSubjectType = z.infer<typeof ApprovalSubjectTypeSchema>;
 
 export const QuotaWindowSchema = z.enum(["none", "daily", "monthly"]);
 export type QuotaWindow = z.infer<typeof QuotaWindowSchema>;
+
+export const JobLogLevelSchema = z.enum(["debug", "info", "warn", "error"]);
+export type JobLogLevel = z.infer<typeof JobLogLevelSchema>;
+
+/**
+ * Why a run stopped. `retryable` means a backoff is scheduled (the job is
+ * PENDING with `next_attempt_at` in the future); `permanent` means the task
+ * reported an unrecoverable error; `exhausted` means the retry ceiling was
+ * hit; `canceled` means an operator stopped it.
+ */
+export const ErrorKindSchema = z.enum(["retryable", "permanent", "exhausted", "canceled"]);
+export type ErrorKind = z.infer<typeof ErrorKindSchema>;
+
+/**
+ * Derived (never persisted) operator-facing job status: the four stored
+ * states plus RETRYING, which is a PENDING job scheduled for a later attempt.
+ */
+export type JobStatus = JobState | "RETRYING";
 
 export const ProviderCallStatusSchema = z.enum(["ok", "error"]);
 export type ProviderCallStatus = z.infer<typeof ProviderCallStatusSchema>;
@@ -228,6 +252,15 @@ export interface PipelineJobRow {
   error: string | null;
   created_at: string;
   updated_at: string;
+  /** Set when the job was created from an idempotency key (unique per key). */
+  idempotency_key: string | null;
+  max_attempts: number;
+  /** Retry backoff: the job is claimable again at/after this time. */
+  next_attempt_at: string | null;
+  heartbeat_at: string | null;
+  error_kind: ErrorKind | null;
+  /** Step key that produced the failure, for operator triage + targeted retry. */
+  failure_step: string | null;
 }
 
 export interface JobStepRow {
@@ -235,12 +268,29 @@ export interface JobStepRow {
   step_key: string;
   idx: number;
   state: StepState;
+  /** Stage fingerprint: identical inputs ⇒ identical hash ⇒ reusable output. */
   input_hash: string | null;
   output: string | null;
   attempt: number;
   error: string | null;
   started_at: string | null;
   finished_at: string | null;
+  /** JSON array of ArtifactRef: the artifacts this stage produced or adopted. */
+  artifacts: string;
+  /** Provenance when the stage was not executed but adopted from another job. */
+  reused_from_job_id: string | null;
+  reused_from_step_key: string | null;
+}
+
+export interface JobLogRow {
+  id: number;
+  job_id: string;
+  step_key: string | null;
+  level: JobLogLevel;
+  event: string;
+  message: string;
+  data: string;
+  created_at: string;
 }
 
 export interface ApprovalRow {
