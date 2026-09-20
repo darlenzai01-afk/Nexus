@@ -1,0 +1,15 @@
+{
+  "name": "@nexus/tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cross-package integration tests (single-package unit tests live next to their sources).",
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean"
+  },
+  "dependencies": {
+    "@nexus/app": "workspace:*",
+    "@nexus/config": "workspace:*"
+  }
+}

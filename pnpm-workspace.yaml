@@ -1,0 +1,9 @@
+packages:
+  - apps/*
+  - packages/*
+  - tests
+
+# pnpm 10 blocks dependency lifecycle scripts by default. esbuild (used by
+# tsx/vitest) is the only dependency allowed to run its install script.
+onlyBuiltDependencies:
+  - esbuild

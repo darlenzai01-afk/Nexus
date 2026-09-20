@@ -1,0 +1,9 @@
+# Build/test artifacts (also covered by .gitignore, listed for clarity)
+dist/
+coverage/
+data/
+pnpm-lock.yaml
+*.tsbuildinfo
+
+# Long-form planning documents are authored prose; do not reflow them.
+docs/plans/

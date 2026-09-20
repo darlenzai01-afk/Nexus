@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Test/coverage output
+coverage/
+
+# Local environment & secrets — NEVER commit real credentials (see .env.example)
+.env
+.env.*
+!.env.example
+
+# Runtime data (SQLite DB, content-addressed artifact store, logs)
+data/
+*.log
+
+# Editor/OS noise
+.DS_Store
+.idea/
+*.swp

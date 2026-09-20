@@ -1,0 +1,22 @@
+{
+  "name": "@nexus/app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Nexus Forge application: HTTP app entrypoint and worker entrypoint (two entrypoints, one codebase — AD-01).",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean"
+  },
+  "dependencies": {
+    "@nexus/config": "workspace:*",
+    "fastify": "^5.0.0"
+  }
+}
