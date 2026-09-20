@@ -1,0 +1,21 @@
+{
+  "name": "@nexus/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SQLite system-of-record (node:sqlite, WAL): versioned migrations, typed domain schemas, validated repository layer — AD-04, discovery §6.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean"
+  },
+  "dependencies": {
+    "zod": "^3.25.0"
+  }
+}

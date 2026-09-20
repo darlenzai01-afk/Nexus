@@ -28,11 +28,16 @@ apps/
   nexus/            # The single application: `app` + `worker` entrypoints (Fastify)
 packages/
   config/           # Shared, schema-validated environment configuration (zod)
+  db/               # SQLite system of record: versioned migrations, typed domain
+                    # schemas, validated repository layer (no blobs, no secrets)
+  storage/          # Content-addressed artifact store (sha256 CAS) behind a
+                    # swappable interface — artifact bytes never enter the DB
 services/           # Intentionally empty — no microservices (AD-01); see its README
 infrastructure/     # Deployment assets (systemd/Docker/litestream) — added in later phases
 tests/              # Cross-package integration tests (unit tests live beside sources)
 docs/
   plans/            # Architecture discovery + decision log (the approved plan)
+  architecture/     # Domain model + persistence notes (per delivered phase)
 ```
 
 ## Prerequisites
@@ -105,5 +110,14 @@ binds to `127.0.0.1` by default — no public surface.
 | 4     | Shorts pipeline (9:16 re-render from scene graph)           | not started                         |
 | 5     | Publishing (upload kit first, YouTube API after audit)      | not started                         |
 
+**Session 2 deliverable (this branch):** the domain model + persistence
+foundation — versioned migrations, typed/validated schemas, resumable job
+state, provenance-tracked artifacts (CAS hashes, never blobs). It sits before
+plan-Phase 1 because every later step depends on typed artifacts and
+crash-resumable jobs. See
+[`docs/architecture/domain-model.md`](docs/architecture/domain-model.md).
+
 Open decisions that block Phase 1 (Remotion licensing, TTS provider) are
-tracked in [`docs/plans/000-decisions.md`](docs/plans/000-decisions.md#open-decisions-must-be-resolved-at-the-named-gate).
+tracked in [`docs/plans/000-decisions.md`](docs/plans/000-decisions.md#open-decisions-must-be-resolved-at-the-named-gate);
+issues, pending items and unresolved risks are tracked in
+[`docs/plans/ISSUES.md`](docs/plans/ISSUES.md).

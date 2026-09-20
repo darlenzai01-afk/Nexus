@@ -20,8 +20,8 @@
     "sourceMap": true,
     "types": ["node"],
     "paths": {
-      "@nexus/config": ["./packages/config/src/index.ts"],
-      "@nexus/app": ["./apps/nexus/src/index.ts"]
+      "@nexus/app": ["./apps/nexus/src/index.ts"],
+      "@nexus/*": ["./packages/*/src/index.ts"]
     }
   }
 }

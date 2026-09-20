@@ -109,6 +109,16 @@ claims/evidence/approvals).
 app and worker ever split across hosts, revisit (→ OD-6 territory). Schema
 kept Postgres-portable (no SQLite-only tricks beyond what Drizzle abstracts).
 
+> **Phase 2 amendment (pending ratification — OD-9 in `ISSUES.md`).** The
+> decision to use SQLite (WAL, single-file, no infra) stands unchanged; the
+> *access layer* is implemented as plain SQL DDL + a hand-written migration
+> runner (`packages/db/src/schema.ts`, `migrate()` with an append-only
+> drift guard) plus zod validation in the repo layer, on `node:sqlite`,
+> instead of Drizzle ORM. Rationale: no native build step, no codegen, full
+> control of the drift guard and the resumability queries, and every
+> statement stays portable to Postgres. The ORM choice is confined to
+> `packages/db`, so adopting Drizzle later is a one-package change.
+
 ---
 
 ## AD-05 — DB-backed job state machine with leases; no workflow engine

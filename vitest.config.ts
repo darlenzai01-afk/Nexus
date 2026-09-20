@@ -10,8 +10,10 @@ export default defineConfig({
   // so `pnpm test` works on a fresh clone without a build step.
   resolve: {
     alias: {
-      "@nexus/config": resolveFromRoot("./packages/config/src/index.ts"),
       "@nexus/app": resolveFromRoot("./apps/nexus/src/index.ts"),
+      "@nexus/config": resolveFromRoot("./packages/config/src/index.ts"),
+      "@nexus/db": resolveFromRoot("./packages/db/src/index.ts"),
+      "@nexus/storage": resolveFromRoot("./packages/storage/src/index.ts"),
     },
   },
   test: {
