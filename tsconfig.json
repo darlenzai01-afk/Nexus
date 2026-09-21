@@ -6,6 +6,7 @@
     { "path": "./packages/db" },
     { "path": "./packages/storage" },
     { "path": "./packages/jobs" },
+    { "path": "./packages/providers" },
     { "path": "./apps/nexus" },
     { "path": "./tests" }
   ]

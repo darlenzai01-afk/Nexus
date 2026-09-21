@@ -1,0 +1,25 @@
+{
+  "name": "@nexus/providers",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Provider abstraction layer (AD-06): vendor-neutral interfaces for LLM, research, TTS, media, storage and publishing — registry + selection, DI container, structured results, timeouts, retries, quota/budget guard and deterministic fakes.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean"
+  },
+  "dependencies": {
+    "@nexus/config": "workspace:*",
+    "@nexus/db": "workspace:*",
+    "@nexus/jobs": "workspace:*",
+    "@nexus/storage": "workspace:*",
+    "zod": "^3.25.0"
+  }
+}

@@ -66,6 +66,24 @@ importers:
         specifier: workspace:*
         version: link:../db
 
+  packages/providers:
+    dependencies:
+      '@nexus/config':
+        specifier: workspace:*
+        version: link:../config
+      '@nexus/db':
+        specifier: workspace:*
+        version: link:../db
+      '@nexus/jobs':
+        specifier: workspace:*
+        version: link:../jobs
+      '@nexus/storage':
+        specifier: workspace:*
+        version: link:../storage
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
+
   packages/storage: {}
 
   tests:

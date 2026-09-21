@@ -276,6 +276,12 @@ export interface LogProviderCallInput {
   error?: string;
   cacheKey?: string;
   accountId?: string;
+  /**
+   * When the call happened. The provider layer owns the clock (deadlines,
+   * backoff and quota windows all read from it), so it stamps the row too;
+   * omitting it falls back to this layer's own clock.
+   */
+  createdAt?: string;
 }
 
 /**
@@ -1299,6 +1305,10 @@ export class Repo {
     if (!input.operation?.trim())
       throw new ValidationError("Invalid provider call: operation is required");
     const status = validate(ProviderCallStatusSchema, input.status ?? "ok", "provider call status");
+    const createdAt = input.createdAt ?? nowIso();
+    if (Number.isNaN(Date.parse(createdAt))) {
+      throw new ValidationError("Invalid provider call: createdAt must be an ISO-8601 timestamp");
+    }
     const result = this.db.run(
       `INSERT INTO provider_call_log (account_id, provider, operation, units, duration_ms, status, error, cache_key, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
@@ -1311,7 +1321,7 @@ export class Repo {
         status,
         input.error ?? null,
         input.cacheKey ?? null,
-        nowIso(),
+        createdAt,
       ],
     );
     return Number(result.lastInsertRowid);
@@ -1334,6 +1344,101 @@ export class Repo {
       "SELECT * FROM provider_call_log ORDER BY id DESC LIMIT ?;",
       [limit],
     );
+  }
+
+  /** The account (adapter + operation scope) that meters a provider's calls. */
+  getProviderAccount(adapter: string, operationScope = "*"): ProviderAccountRow | undefined {
+    if (!adapter?.trim())
+      throw new ValidationError("Invalid provider account: adapter is required");
+    return this.db.get<ProviderAccountRow>(
+      "SELECT * FROM provider_accounts WHERE adapter = ? AND operation_scope = ?;",
+      [adapter, operationScope],
+    );
+  }
+
+  /**
+   * Charge consumption against an account's quota window. This is the write
+   * path the budget guard (AD-13) uses after every metered call; `units` must
+   * be a finite non-negative number.
+   */
+  recordProviderUsage(accountId: string, units: number): ProviderAccountRow {
+    if (!Number.isFinite(units) || units < 0) {
+      throw new ValidationError("Invalid provider usage: units must be a finite number >= 0");
+    }
+    const account = this.requireProviderAccount(accountId);
+    this.db.run(
+      `UPDATE provider_accounts
+          SET quota_used = quota_used + ?, updated_at = ?
+        WHERE id = ?;`,
+      [units, nowIso(), account.id],
+    );
+    return this.requireProviderAccount(accountId);
+  }
+
+  /**
+   * Stamp the window's start without touching `quota_used` — used the first
+   * time an account is evaluated, so usage recorded before the stamp is not
+   * mistaken for a previous window's debt.
+   */
+  stampProviderWindow(accountId: string, startedAtIso?: string): ProviderAccountRow {
+    const account = this.requireProviderAccount(accountId);
+    const startedAt = startedAtIso ?? nowIso();
+    if (Number.isNaN(Date.parse(startedAt))) {
+      throw new ValidationError("Invalid provider window start: expected an ISO-8601 timestamp");
+    }
+    this.db.run(
+      "UPDATE provider_accounts SET window_started_at = ?, updated_at = ? WHERE id = ?;",
+      [startedAt, nowIso(), account.id],
+    );
+    return this.requireProviderAccount(accountId);
+  }
+
+  /**
+   * Start a fresh quota window (rollover, or an operator clearing the counter).
+   * `startedAtIso` lets the caller stamp the window's *logical* start (e.g. UTC
+   * midnight) instead of the instant the rollover happened to be noticed.
+   */
+  resetProviderQuotaWindow(accountId: string, startedAtIso?: string): ProviderAccountRow {
+    const account = this.requireProviderAccount(accountId);
+    const startedAt = startedAtIso ?? nowIso();
+    if (Number.isNaN(Date.parse(startedAt))) {
+      throw new ValidationError("Invalid provider window start: expected an ISO-8601 timestamp");
+    }
+    this.db.run(
+      `UPDATE provider_accounts
+          SET quota_used = 0, window_started_at = ?, updated_at = ?
+        WHERE id = ?;`,
+      [startedAt, nowIso(), account.id],
+    );
+    return this.requireProviderAccount(accountId);
+  }
+
+  /**
+   * Park a provider until a timestamp (rate-limit / cooldown). Pass null to
+   * clear it. Calls made while cooling down are refused before they are sent.
+   */
+  setProviderCooldown(accountId: string, untilIso: string | null): ProviderAccountRow {
+    const account = this.requireProviderAccount(accountId);
+    if (untilIso !== null && Number.isNaN(Date.parse(untilIso))) {
+      throw new ValidationError(
+        "Invalid provider cooldown: expected an ISO-8601 timestamp or null",
+      );
+    }
+    this.db.run("UPDATE provider_accounts SET cooldown_until = ?, updated_at = ? WHERE id = ?;", [
+      untilIso,
+      nowIso(),
+      account.id,
+    ]);
+    return this.requireProviderAccount(accountId);
+  }
+
+  private requireProviderAccount(accountId: string): ProviderAccountRow {
+    const account = this.db.get<ProviderAccountRow>(
+      "SELECT * FROM provider_accounts WHERE id = ?;",
+      [accountId],
+    );
+    if (!account) throw new NotFoundError("Provider account", accountId);
+    return account;
   }
 
   // ── Escape hatch for read-only diagnostics ──────────────────────────────

@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../config" },
+    { "path": "../db" },
+    { "path": "../jobs" },
+    { "path": "../storage" }
+  ]
+}

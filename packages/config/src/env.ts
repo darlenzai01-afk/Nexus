@@ -22,10 +22,39 @@ export const envSchema = z.object({
     .default("info"),
   NEXUS_DATA_DIR: z.string().min(1).default("data"),
   NEXUS_WORKER_HEARTBEAT_MS: z.coerce.number().int().min(100).default(30_000),
-  // Provider selection (AD-06). "none" = fully offline; real adapter ids
-  // (e.g. "fake", "manual", vendor ids) are registered in later phases.
+  // Provider selection (AD-06). "none" = fully offline; "fake" = deterministic
+  // offline implementation; "manual" = human-in-the-loop; otherwise an adapter
+  // id, optionally with a variant (`openai-compatible:meta-llama/…`).
   NEXUS_LLM_PROVIDER: z.string().min(1).default("none"),
   NEXUS_TTS_PROVIDER: z.string().min(1).default("none"),
+  NEXUS_RESEARCH_PROVIDER: z.string().min(1).default("none"),
+  NEXUS_MEDIA_PROVIDER: z.string().min(1).default("none"),
+  // Artifacts are local by design (AD-09); cloud storage is a later adapter.
+  NEXUS_STORAGE_PROVIDER: z.string().min(1).default("local"),
+  NEXUS_PUBLISHING_PROVIDER: z.string().min(1).default("none"),
+
+  // ── Provider policy (AD-06/AD-13) ──────────────────────────────────────
+  // Per-call deadline. Every provider call is bounded; a hung free tier must
+  // not stall a stage.
+  NEXUS_PROVIDER_TIMEOUT_MS: z.coerce.number().int().min(100).default(30_000),
+  // Attempts per call (transport-level retries), including the first.
+  NEXUS_PROVIDER_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(3),
+  // Content-hash caching of provider results: re-runs cost nothing (AD-13).
+  NEXUS_PROVIDER_CACHE: z.enum(["on", "off"]).default("on"),
+  // Fraction of a free-tier window at which a capability degrades to manual.
+  NEXUS_PROVIDER_DEGRADE_RATIO: z.coerce.number().min(0).max(1).default(0.9),
+  // Client-side safety valve (0 = no self-imposed limit).
+  NEXUS_PROVIDER_RATE_LIMIT_PER_MIN: z.coerce.number().min(0).default(0),
+  // Base URL + default model for OpenAI-compatible LLM endpoints (OD-3).
+  // Validated here so a typo fails at startup, not on the first script call.
+  NEXUS_LLM_BASE_URL: z
+    .string()
+    .url()
+    .refine((value) => value.startsWith("http://") || value.startsWith("https://"), {
+      message: "must be an http(s) URL",
+    })
+    .default("https://openrouter.ai/api/v1"),
+  NEXUS_LLM_MODEL: z.string().min(1).default("meta-llama/llama-3.1-8b-instruct"),
 });
 
 /** The validated, normalized application configuration. */
@@ -37,9 +66,24 @@ export interface AppConfig {
   /** Absolute path for persistent state (SQLite DB + artifact store, later phases). */
   readonly dataDir: string;
   readonly workerHeartbeatMs: number;
+  /** Which adapter serves each capability (AD-06). `none` = not configured. */
   readonly providers: {
     readonly llm: string;
     readonly tts: string;
+    readonly research: string;
+    readonly media: string;
+    readonly storage: string;
+    readonly publishing: string;
+  };
+  /** Provider call policy: deadlines, retries, caching, budget degradation. */
+  readonly providerPolicy: {
+    readonly timeoutMs: number;
+    readonly maxAttempts: number;
+    readonly cacheEnabled: boolean;
+    readonly degradeRatio: number;
+    readonly rateLimitPerMinute: number;
+    readonly llmBaseUrl: string;
+    readonly defaultLlmModel: string;
   };
 }
 
@@ -104,6 +148,19 @@ export function loadEnv(options: LoadEnvOptions = {}): AppConfig {
     providers: {
       llm: parsed.NEXUS_LLM_PROVIDER,
       tts: parsed.NEXUS_TTS_PROVIDER,
+      research: parsed.NEXUS_RESEARCH_PROVIDER,
+      media: parsed.NEXUS_MEDIA_PROVIDER,
+      storage: parsed.NEXUS_STORAGE_PROVIDER,
+      publishing: parsed.NEXUS_PUBLISHING_PROVIDER,
+    },
+    providerPolicy: {
+      timeoutMs: parsed.NEXUS_PROVIDER_TIMEOUT_MS,
+      maxAttempts: parsed.NEXUS_PROVIDER_MAX_ATTEMPTS,
+      cacheEnabled: parsed.NEXUS_PROVIDER_CACHE === "on",
+      degradeRatio: parsed.NEXUS_PROVIDER_DEGRADE_RATIO,
+      rateLimitPerMinute: parsed.NEXUS_PROVIDER_RATE_LIMIT_PER_MIN,
+      llmBaseUrl: parsed.NEXUS_LLM_BASE_URL,
+      defaultLlmModel: parsed.NEXUS_LLM_MODEL,
     },
   };
 }

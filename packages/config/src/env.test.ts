@@ -15,7 +15,26 @@ describe("loadEnv", () => {
     expect(config.port).toBe(8080);
     expect(config.logLevel).toBe("info");
     expect(config.workerHeartbeatMs).toBe(30_000);
-    expect(config.providers).toEqual({ llm: "none", tts: "none" });
+    // Every capability starts unconfigured (the pipeline fails actionably
+    // rather than reaching for a network), except storage: the local CAS needs
+    // no account and is what makes the system runnable out of the box.
+    expect(config.providers).toEqual({
+      llm: "none",
+      tts: "none",
+      research: "none",
+      media: "none",
+      storage: "local",
+      publishing: "none",
+    });
+    expect(config.providerPolicy).toEqual({
+      timeoutMs: 30_000,
+      maxAttempts: 3,
+      cacheEnabled: true,
+      degradeRatio: 0.9,
+      rateLimitPerMinute: 0,
+      llmBaseUrl: "https://openrouter.ai/api/v1",
+      defaultLlmModel: "meta-llama/llama-3.1-8b-instruct",
+    });
     expect(path.isAbsolute(config.dataDir)).toBe(true);
   });
 
@@ -34,6 +53,61 @@ describe("loadEnv", () => {
     expect(config.logLevel).toBe("debug");
     expect(config.providers.llm).toBe("fake");
     expect(config.providers.tts).toBe("none");
+  });
+
+  it("accepts the whole provider surface (selection, policy, base URL, model)", () => {
+    const config = loadEnv({
+      env: {
+        NEXUS_LLM_PROVIDER: "openai-compatible:mistralai/mistral-nemo",
+        NEXUS_TTS_PROVIDER: "fake",
+        NEXUS_RESEARCH_PROVIDER: "manual",
+        NEXUS_MEDIA_PROVIDER: "fake",
+        NEXUS_STORAGE_PROVIDER: "fake",
+        NEXUS_PUBLISHING_PROVIDER: "manual",
+        NEXUS_PROVIDER_TIMEOUT_MS: "45000",
+        NEXUS_PROVIDER_MAX_ATTEMPTS: "5",
+        NEXUS_PROVIDER_CACHE: "off",
+        NEXUS_PROVIDER_DEGRADE_RATIO: "0.8",
+        NEXUS_PROVIDER_RATE_LIMIT_PER_MIN: "30",
+        NEXUS_LLM_BASE_URL: "https://api.groq.com/openai/v1",
+        NEXUS_LLM_MODEL: "llama-3.1-8b-instant",
+      },
+    });
+
+    expect(config.providers).toEqual({
+      llm: "openai-compatible:mistralai/mistral-nemo",
+      tts: "fake",
+      research: "manual",
+      media: "fake",
+      storage: "fake",
+      publishing: "manual",
+    });
+    expect(config.providerPolicy).toEqual({
+      timeoutMs: 45_000,
+      maxAttempts: 5,
+      cacheEnabled: false,
+      degradeRatio: 0.8,
+      rateLimitPerMinute: 30,
+      llmBaseUrl: "https://api.groq.com/openai/v1",
+      defaultLlmModel: "llama-3.1-8b-instant",
+    });
+  });
+
+  it("rejects a nonsense provider policy instead of guessing", () => {
+    expect(() => loadEnv({ env: { NEXUS_PROVIDER_TIMEOUT_MS: "0" } })).toThrow(EnvValidationError);
+    expect(() => loadEnv({ env: { NEXUS_PROVIDER_MAX_ATTEMPTS: "0" } })).toThrow(
+      EnvValidationError,
+    );
+    expect(() => loadEnv({ env: { NEXUS_PROVIDER_DEGRADE_RATIO: "2" } })).toThrow(
+      EnvValidationError,
+    );
+    expect(() => loadEnv({ env: { NEXUS_PROVIDER_CACHE: "maybe" } })).toThrow(
+      /NEXUS_PROVIDER_CACHE/,
+    );
+    expect(() => loadEnv({ env: { NEXUS_PROVIDER_RATE_LIMIT_PER_MIN: "-1" } })).toThrow(
+      EnvValidationError,
+    );
+    expect(() => loadEnv({ env: { NEXUS_LLM_BASE_URL: "not a url" } })).toThrow(EnvValidationError);
   });
 
   it("fails fast with an actionable error on invalid values", () => {
