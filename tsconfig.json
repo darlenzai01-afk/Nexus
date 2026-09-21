@@ -9,6 +9,7 @@
     { "path": "./packages/providers" },
     { "path": "./packages/research" },
     { "path": "./packages/script" },
+    { "path": "./packages/scenes" },
     { "path": "./apps/nexus" },
     { "path": "./tests" }
   ]

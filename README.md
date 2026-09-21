@@ -47,6 +47,11 @@ packages/
                     # structured narration script (hook, sections, transitions,
                     # conclusion, visual cues) with a claim/evidence ledger, a
                     # deterministic writing lint and the `script` stage task
+  scenes/           # The scene planner (Phase 7): validated script → scene
+                    # manifest (six scene types, camera, animation events,
+                    # transitions, on-screen text/diagrams/media, planned assets,
+                    # claim/source references) with strict schemas, a coded issue
+                    # list and the `plan` stage task — no renderer
 services/           # Intentionally empty — no microservices (AD-01); see its README
 infrastructure/     # Deployment assets (systemd/Docker/litestream) — added in later phases
 tests/              # Cross-package integration tests (unit tests live beside sources)
@@ -116,19 +121,20 @@ binds to `127.0.0.1` by default — no public surface.
 
 ## Roadmap (from the approved plan)
 
-| Plan phase | Scope                                                       | State                                                            |
-| ---------- | ----------------------------------------------------------- | ---------------------------------------------------------------- |
-| 0          | Monorepo, config, tooling, CI, app/worker entrypoints       | ✅ delivered                                                     |
-| —          | **Session 2:** domain schemas + persistence foundation      | ✅ delivered (`docs/architecture/domain-model.md`)               |
-| —          | **Session 3:** persistent job orchestration foundation      | ✅ delivered (`docs/architecture/job-orchestration.md`)          |
-| —          | **Session 4:** provider abstraction layer (AD-06/12/13)     | ✅ delivered (`docs/architecture/provider-layer.md`)             |
-| —          | **Session 5:** research engine (topic → research package)   | ✅ delivered (`docs/architecture/research-engine.md`)            |
-| —          | **Session 6:** script engine (research package → script)    | ✅ delivered (`docs/architecture/script-engine.md`)              |
-| 1          | Hard loop: script → scene graph → voice → captions → render | next (blocked on OD-1 Remotion, OD-2 TTS)                        |
-| 2          | Research + fact-check with claim/evidence traceability      | research engine ✅, script engine ✅; `fact_check` stage pending |
-| 3          | Full long-form pipeline + media/license engine              | pending                                                          |
-| 4          | Shorts pipeline (9:16 re-render from scene graph)           | pending                                                          |
-| 5          | Publishing (upload kit first, YouTube API after audit)      | pending                                                          |
+| Plan phase | Scope                                                       | State                                                                   |
+| ---------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
+| 0          | Monorepo, config, tooling, CI, app/worker entrypoints       | ✅ delivered                                                            |
+| —          | **Session 2:** domain schemas + persistence foundation      | ✅ delivered (`docs/architecture/domain-model.md`)                      |
+| —          | **Session 3:** persistent job orchestration foundation      | ✅ delivered (`docs/architecture/job-orchestration.md`)                 |
+| —          | **Session 4:** provider abstraction layer (AD-06/12/13)     | ✅ delivered (`docs/architecture/provider-layer.md`)                    |
+| —          | **Session 5:** research engine (topic → research package)   | ✅ delivered (`docs/architecture/research-engine.md`)                   |
+| —          | **Session 6:** script engine (research package → script)    | ✅ delivered (`docs/architecture/script-engine.md`)                     |
+| —          | **Session 7:** scene manifest (script → six scene types)    | ✅ delivered (`docs/architecture/scene-manifest.md`)                    |
+| 1          | Hard loop: script → scene graph → voice → captions → render | scene graph ✅ (Session 7); voice/render next (OD-1 Remotion, OD-2 TTS) |
+| 2          | Research + fact-check with claim/evidence traceability      | research ✅, script ✅, scenes ✅; `fact_check` stage pending           |
+| 3          | Full long-form pipeline + media/license engine              | pending                                                                 |
+| 4          | Shorts pipeline (9:16 re-render from scene graph)           | pending                                                                 |
+| 5          | Publishing (upload kit first, YouTube API after audit)      | pending                                                                 |
 
 **Delivered so far on this branch:** (a) the provider layer — six capability
 interfaces with a registry, a quota-aware `invoke()` pipeline, deterministic
@@ -155,7 +161,16 @@ sentence to the verbatim research evidence behind it, with the writing rules
 (cleared facts only, attribution for everything else, no invented quotation,
 source or suspense, no filler) enforced by deterministic validation and a gate
 that removes what cannot be fixed —
-[`docs/architecture/script-engine.md`](docs/architecture/script-engine.md).
+[`docs/architecture/script-engine.md`](docs/architecture/script-engine.md);
+and (f) the scene planner — `validated script → scene manifest`: an ordered
+timeline of CHARACTER / EVIDENCE / HYBRID / DIAGRAM / ENVIRONMENT / TRANSITION
+scenes, each carrying the narration it speaks (verbatim, with its sentence ids),
+the characters on screen with their states, on-screen text and diagrams built only
+from cited research claims, camera, animation events and the transition into the
+next scene, plus an asset inventory with search hints for the media stage and the
+claim/source evidence behind every factual scene, all validated by strict schemas
+and a 28-code issue list — and nothing rendered —
+[`docs/architecture/scene-manifest.md`](docs/architecture/scene-manifest.md).
 These sit before plan-Phase 1 because every later step depends on typed
 artifacts and crash-resumable, non-duplicating jobs.
 
@@ -170,6 +185,12 @@ configuration of its own: `NEXUS_LLM_PROVIDER=fake NEXUS_RESEARCH_PROVIDER=fake`
 runs the whole engine offline, and with no search provider configured the stage
 parks the job at `MANUAL_INPUT` so an operator can paste sources
 (`params.operatorSources`) instead of the engine inventing any.
+
+The plan stage needs no provider at all: it reads the script the previous stage
+published and plans deterministically (the same script plans the same scenes
+every time), so `pnpm verify` — and any re-plan — costs nothing and touches no
+network. It stores one `scene_graph` artifact and never writes `scenes` rows
+(OD-19).
 
 The script stage needs only the `llm` capability (the fakes write a schema-valid
 draft offline) and reads the package the earlier stage published. It parks the

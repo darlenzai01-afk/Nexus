@@ -102,6 +102,27 @@ importers:
         specifier: ^3.25.0
         version: 3.25.76
 
+  packages/scenes:
+    dependencies:
+      '@nexus/db':
+        specifier: workspace:*
+        version: link:../db
+      '@nexus/jobs':
+        specifier: workspace:*
+        version: link:../jobs
+      '@nexus/providers':
+        specifier: workspace:*
+        version: link:../providers
+      '@nexus/script':
+        specifier: workspace:*
+        version: link:../script
+      '@nexus/storage':
+        specifier: workspace:*
+        version: link:../storage
+      zod:
+        specifier: ^3.25.25
+        version: 3.25.76
+
   packages/script:
     dependencies:
       '@nexus/db':
