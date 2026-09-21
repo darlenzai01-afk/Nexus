@@ -20,6 +20,7 @@ export default defineConfig({
       "@nexus/script": resolveFromRoot("./packages/script/src/index.ts"),
       "@nexus/scenes": resolveFromRoot("./packages/scenes/src/index.ts"),
       "@nexus/characters": resolveFromRoot("./packages/characters/src/index.ts"),
+      "@nexus/render": resolveFromRoot("./packages/render/src/index.ts"),
     },
   },
   test: {

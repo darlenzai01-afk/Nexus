@@ -249,6 +249,11 @@ checked by hash, and the tests read the same documents the library ships.
 ## 9. Related documents
 
 - `docs/architecture/scene-manifest.md` — the manifest these references live in.
+- `docs/architecture/render-engine.md` — the first consumer: the composition
+  engine resolves a scene's cast through `performanceFor` → `selectionForState` →
+  this package's `resolve`, so what a character _is_ stays defined here while what
+  it _looks like in a frame_ is decided there.
 - `docs/architecture/script-engine.md` — where the narration comes from.
-- `docs/plans/ISSUES.md` — OD-22…OD-23, GAP-24…GAP-26, CI-22…CI-24.
+- `docs/plans/ISSUES.md` — OD-22…OD-23, GAP-24…GAP-26, CI-22…CI-24, and the phase 9
+  entries OD-24…OD-26, GAP-27…GAP-33, CI-25…CI-29.
 - `docs/plans/000-decisions.md` — AD-07 (deterministic code, AI for prose only).

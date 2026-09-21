@@ -123,6 +123,7 @@ export {
   type SceneStepTrace,
   type SceneText,
   type SceneTextKind,
+  type SceneTextPosition,
   type SceneTransition,
   type SceneTransitionKind,
   type SceneType,

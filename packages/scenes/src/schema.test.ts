@@ -4,6 +4,7 @@ import { CLEAR_CLAIM_ID, SCRIPT_HASH, handWrittenManifest, manifestFixture } fro
 import {
   SCENE_ISSUE_CODES,
   SCENE_TYPES,
+  SceneAnimationKindSchema,
   SceneManifestSchema,
   manifestNarration,
   parseSceneManifest,
@@ -200,6 +201,75 @@ describe("the strictness promise", () => {
     };
     badKind.scenes[0]!.animation[0]!.kind = "explode";
     expect(SceneManifestSchema.safeParse(badKind).success).toBe(false);
+  });
+
+  it("carries the compositor's animation vocabulary, including the performance kinds", () => {
+    expect(SceneAnimationKindSchema.options).toEqual([
+      "fade_in",
+      "fade_out",
+      "slide_in",
+      "slide_out",
+      "scale_in",
+      "type_on",
+      "count_up",
+      "highlight",
+      "lower_third",
+      "callout",
+      "wipe_in",
+      "push_in",
+      "zoom_to",
+      "pulse",
+      "rotate",
+      "split_open",
+      "dissolve_out",
+      "pose_change",
+      "expression_change",
+    ]);
+
+    const parsed = parseSceneManifest(handWrittenManifest());
+    const withPerformance = {
+      ...parsed,
+      scenes: [
+        {
+          ...parsed.scenes[0]!,
+          animation: [
+            {
+              id: "a1",
+              atSec: 0.2,
+              durationSec: 0.3,
+              kind: "pose_change",
+              target: "character",
+              targetId: "presenter",
+              params: { pose: "walk" },
+            },
+            {
+              id: "a2",
+              atSec: 0.6,
+              durationSec: 0.3,
+              kind: "rotate",
+              target: "scene",
+              targetId: "",
+              params: { to: 4 },
+            },
+          ],
+        },
+        parsed.scenes[1]!,
+      ],
+    };
+    expect(SceneManifestSchema.safeParse(withPerformance).success).toBe(true);
+
+    // A performance change has to name the character and the variant.
+    const noTarget = structuredClone(withPerformance) as unknown as {
+      scenes: { animation: { target: string }[] }[];
+    };
+    noTarget.scenes[0]!.animation[0]!.target = "scene";
+    expect(SceneManifestSchema.safeParse(noTarget).success).toBe(false);
+
+    const noVariant = structuredClone(withPerformance) as unknown as {
+      scenes: { animation: { params: Record<string, unknown> }[] }[];
+    };
+    noVariant.scenes[0]!.animation[0]!.params = {};
+    expect(SceneManifestSchema.safeParse(noVariant).success).toBe(false);
   });
 
   it("refuses narration whose word count does not match its words", () => {

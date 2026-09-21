@@ -4,11 +4,12 @@ Cloud-first automated video production system: topic → research → fact-check
 → script → scenes → media → voice → captions → render → QA → **human
 approval** → publish, plus a long-form → Shorts repurposing pipeline.
 
-> **Status: research → script → scene plan → characters.** The provider layer,
-> the job orchestrator, the research engine, the script engine, the scene planner
-> and the character system are delivered and tested offline. Nothing renders,
-> speaks or publishes yet: the voice, media, caption and render stages are still
-> to come. The architecture is fully planned in
+> **Status: research → script → scene plan → characters → composition.**
+> The provider layer, the job orchestrator, the research engine, the script
+> engine, the scene planner, the character system and the animation/composition
+> engine are delivered and tested offline. Nothing speaks, publishes or writes a
+> video file yet: the voice, media and caption stages and the rasteriser/encoder
+> are still to come. The architecture is fully planned in
 > [`docs/plans/000-architecture-discovery.md`](docs/plans/000-architecture-discovery.md)
 > with binding decisions in [`docs/plans/000-decisions.md`](docs/plans/000-decisions.md).
 
@@ -61,6 +62,11 @@ packages/
                     # resolver that turns a performance into an ordered layer
                     # stack, a small demonstration cast, and the sync that lets a
                     # scene manifest reference characters without copying them
+  render/           # Animation & composition engine (Phase 9): a validated scene
+                    # manifest + the character library -> deterministic frames
+                    # (blocking, camera, animation events, text, transitions,
+                    # pose/expression) -> SVG, with a coded diagnostic list and a
+                    # one-scene demonstration wired end to end
 services/           # Intentionally empty — no microservices (AD-01); see its README
 infrastructure/     # Deployment assets (systemd/Docker/litestream) — added in later phases
 tests/              # Cross-package integration tests (unit tests live beside sources)
@@ -140,6 +146,7 @@ binds to `127.0.0.1` by default — no public surface.
 | —          | **Session 6:** script engine (research package → script)    | ✅ delivered (`docs/architecture/script-engine.md`)                     |
 | —          | **Session 7:** scene manifest (script → six scene types)    | ✅ delivered (`docs/architecture/scene-manifest.md`)                    |
 | —          | **Session 8:** character system (reusable original cast)    | ✅ delivered (`docs/architecture/character-system.md`)                  |
+| —          | **Session 9:** animation & composition engine (one scene)   | ✅ delivered (`docs/architecture/render-engine.md`)                     |
 | 1          | Hard loop: script → scene graph → voice → captions → render | scene graph ✅ (Session 7); voice/render next (OD-1 Remotion, OD-2 TTS) |
 | 2          | Research + fact-check with claim/evidence traceability      | research ✅, script ✅, scenes ✅; `fact_check` stage pending           |
 | 3          | Full long-form pipeline + media/license engine              | pending                                                                 |
@@ -189,7 +196,16 @@ layer stack with exactly one layer per painted region, and a sync that lets the
 scene manifest reference characters by `{characterId, version, hash}` without
 copying a single one of their details — shipped with a small, original
 two-character demonstration set (38 flat SVG layers, generated deterministically)
-and no renderer — [`docs/architecture/character-system.md`](docs/architecture/character-system.md).
+and no renderer — [`docs/architecture/character-system.md`](docs/architecture/character-system.md);
+and (h) the animation & composition engine — `@nexus/render`: a validated scene
+manifest plus the character library become **deterministic frames** (blocking by
+cast count and shot, camera setups from 13 movements / 5 focuses / 5 angles,
+animation events folded into opacity / position / scale / rotation / reveal /
+pose / expression, on-screen text with counting, typing and fitting, and the
+trailing transition seam), and those frames become SVG — with the demonstration
+scene (`packages/render/demo/scene.json`: two characters, 12 events, 345 frames)
+walked end to end from manifest to composited scene, and no video pipeline —
+[`docs/architecture/render-engine.md`](docs/architecture/render-engine.md).
 These sit before plan-Phase 1 because every later step depends on typed
 artifacts and crash-resumable, non-duplicating jobs.
 
@@ -218,6 +234,13 @@ library as a plan's `cast` is what turns `cast[].id` into a definition reference
 Rebuild the demonstration art with
 `node packages/characters/tools/build-demo-set.mjs` — byte-identical on a re-run,
 so the hashes the definitions record stay valid.
+
+The composition engine needs no provider either, and no rasteriser: it composes
+frames, writer as SVG. `pnpm test` runs the smoke test
+(`packages/render/src/demo.test.ts`) over the shipped demonstration scene, and
+`pnpm build && node packages/render/tools/compose-demo.mjs` writes a storyboard of
+sampled frames, the frame documents and four full-resolution frames into
+`data/render-demo/` for a browser to draw.
 
 The script stage needs only the `llm` capability (the fakes write a schema-valid
 draft offline) and reads the package the earlier stage published. It parks the

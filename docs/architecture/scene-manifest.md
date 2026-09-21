@@ -121,23 +121,35 @@ with a non-zero duration is a validation error: the renderer has nothing to fade
 
 A scene carries:
 
-| Field                     | Contents                                                                                                                                                 |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`, `index`             | `scn_<section>_<n>` for a sentence scene, `scn_<section>_t` for a spoken bridge; `index` must equal the position                                         |
-| `type`                    | One of the six, each with its required blocks                                                                                                            |
-| `sectionId`, `role`       | Where in the script it came from (`hook` → `introduction` → `narrative…` → `conclusion`)                                                                 |
-| `startSec`, `durationSec` | Position and length on the timeline                                                                                                                      |
-| `narration`               | `{kind: sentence\|paragraph\|transition, text, sectionId, role, sentenceIds[], words, estimatedDurationSec}` — the reference back into the script        |
-| `characters[]`            | `{characterId, state}` with the eight-state rig (`idle`, `talking`, `listening`, `gesturing`, `pointing`, `reacting`, `entering`, `exiting`)             |
-| `media`                   | `{kind (image\|video\|document\|generated), description, searchHint, orientation, treatment, assets[]}` — `assets[]` names ids in the manifest inventory |
-| `text`                    | `{kind (title\|claim\|quote\|number\|label\|callout), value, attribution, position, maxLines}` — verbatim from the script or its evidence                |
-| `diagram`                 | `{kind (9 kinds), title, annotations[], series[], claimIds[]}` — `series[]` is empty until a stage has real numbers to plot                              |
-| `camera`                  | `{shot, movement, angle, focus}` — 8 shots × 13 movements × 5 angles × 5 focuses                                                                         |
-| `animation[]`             | `{id, atSec, durationSec, kind (16 kinds), target (scene\|character\|media\|text\|diagram), targetId, params}` — ordered, unique, inside the scene       |
-| `transition`              | `{kind (11 kinds), durationSec, toSceneId, audio (none\|crossfade\|whoosh\|impact\|beat)}` — must point at the next scene, `""` on the last              |
-| `sources[]`               | The claim/evidence chain: `{claimId, statement, usage, status, certainty, confidence, evidence[{sourceId, url, excerpt, locator}]}`                      |
-| `sourceIds[]`             | The flat list of research source ids visible in the scene (sorted, deduplicated)                                                                         |
-| `notes[]`                 | Planner/validator notes attached to this scene                                                                                                           |
+| Field                     | Contents                                                                                                                                                          |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`, `index`             | `scn_<section>_<n>` for a sentence scene, `scn_<section>_t` for a spoken bridge; `index` must equal the position                                                  |
+| `type`                    | One of the six, each with its required blocks                                                                                                                     |
+| `sectionId`, `role`       | Where in the script it came from (`hook` → `introduction` → `narrative…` → `conclusion`)                                                                          |
+| `startSec`, `durationSec` | Position and length on the timeline                                                                                                                               |
+| `narration`               | `{kind: sentence\|paragraph\|transition, text, sectionId, role, sentenceIds[], words, estimatedDurationSec}` — the reference back into the script                 |
+| `characters[]`            | `{characterId, state}` with the eight-state rig (`idle`, `talking`, `listening`, `gesturing`, `pointing`, `reacting`, `entering`, `exiting`)                      |
+| `media`                   | `{kind (image\|video\|document\|generated), description, searchHint, orientation, treatment, assets[]}` — `assets[]` names ids in the manifest inventory          |
+| `text`                    | `{kind (title\|claim\|quote\|number\|label\|callout), value, attribution, position, maxLines}` — verbatim from the script or its evidence                         |
+| `diagram`                 | `{kind (9 kinds), title, annotations[], series[], claimIds[]}` — `series[]` is empty until a stage has real numbers to plot                                       |
+| `camera`                  | `{shot, movement, angle, focus}` — 8 shots × 13 movements × 5 angles × 5 focuses                                                                                  |
+| `animation[]`             | `{id, atSec, durationSec, kind (**19 kinds**, see below), target (scene\|character\|media\|text\|diagram), targetId, params}` — ordered, unique, inside the scene |
+| `transition`              | `{kind (11 kinds), durationSec, toSceneId, audio (none\|crossfade\|whoosh\|impact\|beat)}` — must point at the next scene, `""` on the last                       |
+| `sources[]`               | The claim/evidence chain: `{claimId, statement, usage, status, certainty, confidence, evidence[{sourceId, url, excerpt, locator}]}`                               |
+| `sourceIds[]`             | The flat list of research source ids visible in the scene (sorted, deduplicated)                                                                                  |
+| `notes[]`                 | Planner/validator notes attached to this scene                                                                                                                    |
+
+The animation vocabulary is grouped by what a kind does: **entrance**
+(`fade_in`, `slide_in`, `scale_in`, `wipe_in`, `push_in`, `split_open`), **exit**
+(`fade_out`, `slide_out`, `dissolve_out`), **transform** (`zoom_to`, `pulse`,
+`rotate`), **text** (`type_on`, `count_up`, `lower_third`, `callout`,
+`highlight`) and **performance** (`pose_change`, `expression_change`). Phase 9
+added `rotate`, `pose_change` and `expression_change` so a scene can turn an
+element and change what a character is doing mid-scene; both performance kinds
+must target a character and name the `pose` / `expression` they switch to
+(`invalid_animation` otherwise). What each kind _does_ to a frame — easing,
+distances, defaults — is the compositor's, not the manifest's:
+[`render-engine.md`](./render-engine.md).
 
 `narration.kind` is how a scene says what it is speaking. `sentence` names the
 script sentences it covers (the planner's output, and the only form that is
@@ -312,5 +324,7 @@ paid call, no rendering:
 - `docs/architecture/research-engine.md` — where claims and evidence originate.
 - `docs/architecture/job-orchestration.md` — stages, fingerprints, artifact reuse.
 - `docs/plans/000-architecture-discovery.md` §6.1 / §11 — the scene-graph intent.
-- `docs/plans/ISSUES.md` — OD-19…OD-21 (planning), GAP-20…GAP-23, CI-17…CI-21, and
-  the phase 8 entries OD-22…OD-23, GAP-24…GAP-26, CI-22…CI-24.
+- `docs/architecture/render-engine.md` — what a frame does with this document.
+- `docs/plans/ISSUES.md` — OD-19…OD-21 (planning), GAP-20…GAP-23, CI-17…CI-21, the
+  phase 8 entries OD-22…OD-23, GAP-24…GAP-26, CI-22…CI-24, and the phase 9 entries
+  OD-24…OD-26, GAP-27…GAP-33, CI-25…CI-29.

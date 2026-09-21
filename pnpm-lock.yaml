@@ -96,6 +96,18 @@ importers:
         specifier: ^3.25.0
         version: 3.25.76
 
+  packages/render:
+    dependencies:
+      '@nexus/characters':
+        specifier: workspace:*
+        version: link:../characters
+      '@nexus/scenes':
+        specifier: workspace:*
+        version: link:../scenes
+      '@nexus/storage':
+        specifier: workspace:*
+        version: link:../storage
+
   packages/research:
     dependencies:
       '@nexus/db':

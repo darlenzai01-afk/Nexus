@@ -284,6 +284,7 @@ export const SceneTextPositionSchema = z.enum([
   "corner",
   "full_screen",
 ]);
+export type SceneTextPosition = z.infer<typeof SceneTextPositionSchema>;
 
 export const SceneTextSchema = z.strictObject({
   kind: SceneTextKindSchema,
@@ -338,6 +339,22 @@ export type SceneDiagram = z.infer<typeof SceneDiagramSchema>;
 
 // ── Animation events ─────────────────────────────────────────────────────
 
+/**
+ * What an animation event does. The vocabulary is deliberately *visual*: every
+ * kind is something a compositor can render from the element it targets.
+ *
+ * | Group       | Kinds                                                                        |
+ * | ----------- | ---------------------------------------------------------------------------- |
+ * | entrance    | `fade_in`, `slide_in`, `scale_in`, `wipe_in`, `push_in`, `split_open`         |
+ * | exit        | `fade_out`, `slide_out`, `dissolve_out`                                       |
+ * | transform   | `zoom_to`, `pulse`, `rotate`                                                  |
+ * | text        | `type_on`, `count_up`, `lower_third`, `callout`, `highlight`                  |
+ * | performance | `pose_change`, `expression_change` (a character changes what it is doing)      |
+ *
+ * `params` carries the numbers a kind needs (`from`, `to`, `distance`, `scale`,
+ * `amount`, `originX`, `originY`), and for the two performance kinds the variant
+ * ids it switches to (`pose`, `expression`).
+ */
 export const SceneAnimationKindSchema = z.enum([
   "fade_in",
   "fade_out",
@@ -353,8 +370,11 @@ export const SceneAnimationKindSchema = z.enum([
   "push_in",
   "zoom_to",
   "pulse",
+  "rotate",
   "split_open",
   "dissolve_out",
+  "pose_change",
+  "expression_change",
 ]);
 export type SceneAnimationKind = z.infer<typeof SceneAnimationKindSchema>;
 export const SceneAnimationTargetSchema = z.enum([
@@ -686,6 +706,28 @@ export const SceneSchema = z
           message: `scene ${scene.id}: animation ${event.id} ends at ${(event.atSec + event.durationSec).toFixed(1)}s, past the scene's ${scene.durationSec}s`,
           params: { code: "invalid_animation" },
         });
+      }
+      // A performance change has to name the character and the variant it switches
+      // to; without both, a compositor has nothing to switch.
+      if (event.kind === "pose_change" || event.kind === "expression_change") {
+        const key = event.kind === "pose_change" ? "pose" : "expression";
+        const wanted = event.params[key];
+        if (event.target !== "character" || event.targetId === "") {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [...at, "target"],
+            message: `scene ${scene.id}: ${event.id} is a ${event.kind}, so it has to target a character (target "character" with the character's id)`,
+            params: { code: "invalid_animation" },
+          });
+        }
+        if (typeof wanted !== "string" || wanted === "") {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [...at, "params"],
+            message: `scene ${scene.id}: ${event.id} is a ${event.kind}, so params.${key} has to name the ${key} it switches to`,
+            params: { code: "invalid_animation" },
+          });
+        }
       }
       previous = event.atSec;
     }
