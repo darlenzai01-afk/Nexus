@@ -105,19 +105,19 @@ with a non-zero duration is a validation error: the renderer has nothing to fade
 
 `SceneManifest` v1 — every block strict, every id `[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}`:
 
-| Field                               | Contents                                                                                                                                 |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `version`                           | `1` (a different version is a parse error, not a best-effort read)                                                                       |
-| `topic`, `workingTitle`, `scriptId` | Identity carried over from the script document                                                                                           |
-| `scriptHash`                        | sha256 of the script artifact this manifest was planned from (the traceability anchor)                                                   |
-| `generatedAt`, `provenance`         | ISO timestamp; engine `nexus-scenes 1.0.0`, the seven step traces, `aiSteps` / `deterministicSteps`                                      |
-| `fps`, `aspect`, `resolution`       | `30`, `16:9`, `1920×1080` by default; `9:16` flips every asset's orientation to portrait                                                 |
-| `wordsPerSecond`                    | The pace every duration was computed with (default `2.5`)                                                                                |
-| `totalDurationSec`                  | The sum of the scenes — validated, never assumed                                                                                         |
-| `cast[]`                            | `{id, name, role (host\|narrator\|guest\|expert\|character), description}` — the people the video may show                               |
-| `scenes[]`                          | The ordered timeline (below)                                                                                                             |
-| `assets[]`                          | `{id, sceneId, kind, purpose, description, searchHint, orientation, minDurationSec, status, uri, licence}` — the media stage's work list |
-| `warnings[]`                        | Everything the planner had to leave out or report, in plain words                                                                        |
+| Field                               | Contents                                                                                                                                                                                                                                                  |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`                           | `1` (a different version is a parse error, not a best-effort read)                                                                                                                                                                                        |
+| `topic`, `workingTitle`, `scriptId` | Identity carried over from the script document                                                                                                                                                                                                            |
+| `scriptHash`                        | sha256 of the script artifact this manifest was planned from (the traceability anchor)                                                                                                                                                                    |
+| `generatedAt`, `provenance`         | ISO timestamp; engine `nexus-scenes 1.0.0`, the seven step traces, `aiSteps` / `deterministicSteps`                                                                                                                                                       |
+| `fps`, `aspect`, `resolution`       | `30`, `16:9`, `1920×1080` by default; `9:16` flips every asset's orientation to portrait                                                                                                                                                                  |
+| `wordsPerSecond`                    | The pace every duration was computed with (default `2.5`)                                                                                                                                                                                                 |
+| `totalDurationSec`                  | The sum of the scenes — validated, never assumed                                                                                                                                                                                                          |
+| `cast[]`                            | `{id, name, role (host\|narrator\|guest\|expert\|character), description, definition?}` — the people the video may show. `definition` is `{characterId, version, hash}`: a _reference_ to the character definition, never the definition itself (phase 8) |
+| `scenes[]`                          | The ordered timeline (below)                                                                                                                                                                                                                              |
+| `assets[]`                          | `{id, sceneId, kind, purpose, description, searchHint, orientation, minDurationSec, status, uri, licence}` — the media stage's work list                                                                                                                  |
+| `warnings[]`                        | Everything the planner had to leave out or report, in plain words                                                                                                                                                                                         |
 
 A scene carries:
 
@@ -191,25 +191,26 @@ Two layers, one vocabulary:
    nothing, and the soft pacing/leftover notes.
 
 Both layers report the same coded issues, so nothing downstream has to read a zod
-message to know what kind of thing is wrong. 28 codes, 25 of them hard:
+message to know what kind of thing is wrong. 31 codes, 27 of them hard:
 
-| Code                     | Severity | Code                  | Severity |
-| ------------------------ | -------- | --------------------- | -------- |
-| `invalid_manifest`       | hard     | `unknown_asset`       | hard     |
-| `unsupported_scene_type` | hard     | `unowned_asset`       | hard     |
-| `empty_manifest`         | hard     | `duplicate_asset_id`  | hard     |
-| `duplicate_scene_id`     | hard     | `orphan_asset`        | soft     |
-| `invalid_timeline`       | hard     | `unknown_scene`       | hard     |
-| `invalid_duration`       | hard     | `unknown_character`   | hard     |
-| `duration_mismatch`      | hard     | `unused_character`    | soft     |
-| `long_scene`             | soft     | `unknown_claim`       | hard     |
-| `missing_narration`      | hard     | `unknown_source`      | hard     |
-| `dangling_narration`     | hard     | `missing_source_refs` | hard     |
-| `narration_mismatch`     | hard     | `invalid_animation`   | hard     |
-| `missing_characters`     | hard     | `invalid_transition`  | hard     |
-| `missing_text`           | hard     | `dangling_transition` | hard     |
-| `missing_diagram`        | hard     |                       |          |
-| `missing_assets`         | hard     |                       |          |
+| Code                     | Severity | Code                            | Severity |
+| ------------------------ | -------- | ------------------------------- | -------- |
+| `invalid_manifest`       | hard     | `unknown_asset`                 | hard     |
+| `unsupported_scene_type` | hard     | `unowned_asset`                 | hard     |
+| `empty_manifest`         | hard     | `duplicate_asset_id`            | hard     |
+| `duplicate_scene_id`     | hard     | `orphan_asset`                  | soft     |
+| `invalid_timeline`       | hard     | `unknown_scene`                 | hard     |
+| `invalid_duration`       | hard     | `unknown_character`             | hard     |
+| `duration_mismatch`      | hard     | `unused_character`              | soft     |
+| `long_scene`             | soft     | `unknown_claim`                 | hard     |
+| `missing_narration`      | hard     | `unknown_source`                | hard     |
+| `dangling_narration`     | hard     | `missing_source_refs`           | hard     |
+| `narration_mismatch`     | hard     | `invalid_animation`             | hard     |
+| `missing_characters`     | hard     | `invalid_transition`            | hard     |
+| `missing_text`           | hard     | `dangling_transition`           | hard     |
+| `missing_diagram`        | hard     | `unknown_character_definition`  | hard     |
+| `missing_assets`         | hard     | `character_definition_mismatch` | hard     |
+|                          |          | `missing_character_definition`  | soft     |
 
 A report is `{ok, issues, stats}`: `ok` is false when any hard issue is present,
 and `stats` counts scenes, scenes by type, assets, words and total duration — the
@@ -221,6 +222,16 @@ because arithmetic over an unparseable timeline would be noise. **Soft notes nev
 fail a parse**: `long_scene`, `orphan_asset` and `unused_character` are notes, so
 they live in the validator, not in the schema — a manifest that is merely worth
 reviewing must still be storable and readable (a rule learned the hard way, CI-17).
+
+Three checks only run when the caller passes the character library the plan's cast
+must resolve against (`{characters}` — `@nexus/characters`' `CharacterLibrary`,
+consumed structurally so this package depends on no other). Without it, a cast
+member is just a name: `unknown_character_definition` (a cast member the library
+has never heard of), `character_definition_mismatch` (the recorded hash is stale —
+the character changed since the plan) and `missing_character_definition` (nothing
+recorded to check). With it, a plan that was made against an older revision of a
+character is caught before anything is rendered from it; see
+[`character-system.md`](./character-system.md).
 
 ---
 
@@ -295,8 +306,11 @@ paid call, no rendering:
 
 ## 8. Related documents
 
+- `docs/architecture/character-system.md` — the definitions the cast references
+  point at, and the sync that resolves them.
 - `docs/architecture/script-engine.md` — the document this phase plans from.
 - `docs/architecture/research-engine.md` — where claims and evidence originate.
 - `docs/architecture/job-orchestration.md` — stages, fingerprints, artifact reuse.
 - `docs/plans/000-architecture-discovery.md` §6.1 / §11 — the scene-graph intent.
-- `docs/plans/ISSUES.md` — OD-19…OD-21, GAP-20…GAP-23, CI-17…CI-21.
+- `docs/plans/ISSUES.md` — OD-19…OD-21 (planning), GAP-20…GAP-23, CI-17…CI-21, and
+  the phase 8 entries OD-22…OD-23, GAP-24…GAP-26, CI-22…CI-24.

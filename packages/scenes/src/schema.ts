@@ -93,6 +93,10 @@ export const SCENE_ISSUE_CODES = [
   "unknown_scene",
   "unknown_character",
   "unused_character",
+  // character definitions (Phase 8)
+  "unknown_character_definition",
+  "character_definition_mismatch",
+  "missing_character_definition",
   "unknown_claim",
   "unknown_source",
   "missing_source_refs",
@@ -128,6 +132,8 @@ export const HARD_SCENE_ISSUE_CODES: readonly SceneIssueCode[] = [
   "duplicate_asset_id",
   "unknown_scene",
   "unknown_character",
+  "unknown_character_definition",
+  "character_definition_mismatch",
   "unknown_claim",
   "unknown_source",
   "missing_source_refs",
@@ -145,12 +151,29 @@ export function sceneIssueSeverity(code: SceneIssueCode): SceneIssueSeverity {
 export const SceneCastRoleSchema = z.enum(["host", "narrator", "guest", "expert", "character"]);
 export type SceneCastRole = z.infer<typeof SceneCastRoleSchema>;
 
+/**
+ * Which revision of a character definition a cast member was planned against —
+ * the id, the schema version and the sha256 of the definition's canonical bytes.
+ *
+ * This is the *whole* character link: a manifest records the reference, never the
+ * pose list, palette or asset paths, so a character can be fixed in one place
+ * (`@nexus/characters`) without rewriting a single scene.
+ */
+export const SceneCharacterDefinitionSchema = z.strictObject({
+  characterId: IdSchema,
+  version: z.number().int().positive(),
+  hash: Sha256Schema,
+});
+export type SceneCharacterDefinition = z.infer<typeof SceneCharacterDefinitionSchema>;
+
 /** A person the video may show. The script never invents one; the planner takes it as input. */
 export const SceneCastMemberSchema = z.strictObject({
   id: IdSchema,
   name: z.string().min(1).max(80),
   role: SceneCastRoleSchema,
   description: z.string().max(400).default(""),
+  /** The character definition behind this member, when one exists. */
+  definition: SceneCharacterDefinitionSchema.optional(),
 });
 export type SceneCastMember = z.infer<typeof SceneCastMemberSchema>;
 

@@ -2,7 +2,13 @@ import { FixedClock } from "@nexus/providers";
 import type { ScriptDoc } from "@nexus/script";
 
 import { buildSceneManifest } from "./plan.js";
-import { parseSceneManifest, type SceneManifest, type SceneManifestInput } from "./schema.js";
+import {
+  parseSceneManifest,
+  type SceneCastMember,
+  type SceneManifest,
+  type SceneManifestInput,
+} from "./schema.js";
+import type { CharacterLibraryView } from "./validate.js";
 
 /**
  * Shared fixtures for the scene planner.
@@ -338,4 +344,40 @@ export function editManifest(
   const draft = structuredClone(manifest) as SceneManifest;
   edit(draft);
   return draft;
+}
+
+/** The definition hash a fixture library hands out for every character. */
+export const CHARACTER_DEFINITION_HASH = "3e9d2c7a".repeat(8);
+
+/**
+ * A stand-in for `@nexus/characters`' `CharacterLibrary`.
+ *
+ * The scene package must not depend on the character package — a manifest is data,
+ * and the library that defines its cast is one optional input — so the tests fake
+ * just the shape the planner and the validator use.
+ */
+export function characterLibraryView(
+  options: {
+    readonly ids?: readonly string[];
+    readonly hashOf?: (id: string) => string;
+    readonly cast?: readonly SceneCastMember[];
+  } = {},
+): CharacterLibraryView & { defaultCast(): readonly SceneCastMember[] } {
+  const ids = options.ids ?? ["presenter"];
+  const hashOf = options.hashOf ?? (() => CHARACTER_DEFINITION_HASH);
+  const cast =
+    options.cast ??
+    ids.map((id) => ({
+      id,
+      name: `Character ${id}`,
+      role: "host" as const,
+      description: `The fixture definition for ${id}.`,
+      definition: { characterId: id, version: 1, hash: hashOf(id) },
+    }));
+  return {
+    ids: () => [...ids],
+    has: (id: string) => ids.includes(id),
+    ref: (id: string) => ({ characterId: id, version: 1, hash: hashOf(id) }),
+    defaultCast: () => cast,
+  };
 }

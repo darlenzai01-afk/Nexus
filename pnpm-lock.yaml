@@ -45,6 +45,18 @@ importers:
         specifier: ^5.0.0
         version: 5.12.5
 
+  packages/characters:
+    dependencies:
+      '@nexus/scenes':
+        specifier: workspace:*
+        version: link:../scenes
+      '@nexus/storage':
+        specifier: workspace:*
+        version: link:../storage
+      zod:
+        specifier: ^3.25.25
+        version: 3.25.76
+
   packages/config:
     dependencies:
       dotenv:

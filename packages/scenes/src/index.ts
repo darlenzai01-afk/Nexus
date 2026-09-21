@@ -13,7 +13,10 @@
  * Public surface, grouped by what a caller is doing:
  *
  * - **Producing:** `buildSceneManifest`, `sceneTypeFor`, `createScenePlanTask`,
- *   `ScenePlanOptions`, `DEFAULT_CAST`, `ScenePlanError`.
+ *   `ScenePlanOptions`, `DEFAULT_CAST`, `ScenePlanError`. A plan takes its cast
+ *   either as a list of members or as anything that can hand one over — a
+ *   `@nexus/characters` library, whose members carry a definition *reference* — so
+ *   a plan points at characters instead of copying them.
  * - **The contract:** every scene type, block and field lives in `./schema.ts` —
  *   strict zod objects, so an unknown field is an error rather than a silent
  *   drop — together with `parseSceneManifest`, `sceneManifestBytes`,
@@ -54,6 +57,7 @@ export {
   SceneCameraSchema,
   SceneCastEntrySchema,
   SceneCastMemberSchema,
+  SceneCharacterDefinitionSchema,
   SceneCastRoleSchema,
   SceneCharacterStateSchema,
   SceneClaimRefSchema,
@@ -99,6 +103,7 @@ export {
   type SceneCamera,
   type SceneCastEntry,
   type SceneCastMember,
+  type SceneCharacterDefinition,
   type SceneCastRole,
   type SceneCharacterState,
   type SceneClaimRef,
@@ -149,7 +154,9 @@ export {
   DEFAULT_TRANSITION_DURATION_SEC,
   ScenePlanError,
   buildSceneManifest,
+  isCastSource,
   sceneTypeFor,
+  type SceneCastSource,
   type ScenePlanOptions,
 } from "./plan.js";
 
@@ -163,6 +170,7 @@ export {
   manifestWordCount,
   mapZodIssues,
   validateSceneManifest,
+  type CharacterLibraryView,
   type SceneIssue,
   type SceneTypeCounts,
   type SceneValidationContext,

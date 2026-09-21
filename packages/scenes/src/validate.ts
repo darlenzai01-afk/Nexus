@@ -37,9 +37,29 @@ import { narrationDurationSec } from "./timing.js";
  * a zod message to know what kind of thing is wrong.
  */
 
+/**
+ * The character side of validation, satisfied by `@nexus/characters`'
+ * `CharacterLibrary`. `@nexus/scenes` deliberately depends on the *shape* rather
+ * than the package: a manifest is data, and the library that defines its cast is
+ * one optional input to checking it.
+ */
+export interface CharacterLibraryView {
+  has(id: string): boolean;
+  ref(id: string): {
+    readonly characterId: string;
+    readonly version: number;
+    readonly hash: string;
+  };
+  ids(): readonly string[];
+  /** Present on `CharacterLibrary`; used by the planner to derive a cast. */
+  defaultCast?(): readonly unknown[];
+}
+
 export interface SceneValidationContext {
   /** The script the manifest should have come from; enables every cross-check. */
   readonly script?: ScriptDoc;
+  /** The character definitions the manifest's cast must resolve against. */
+  readonly characters?: CharacterLibraryView;
   /** Slack for the 0.1 s rounding of every duration. */
   readonly toleranceSec?: number;
   /** How much longer than its narration a scene may hold (deliberate beats). */
@@ -50,7 +70,9 @@ export interface SceneValidationContext {
   readonly wordsPerSecond?: number;
 }
 
-export const DEFAULT_SCENE_VALIDATION: Required<Omit<SceneValidationContext, "script">> = {
+export const DEFAULT_SCENE_VALIDATION: Required<
+  Omit<SceneValidationContext, "script" | "characters">
+> = {
   toleranceSec: 0.2,
   extraHoldSec: 1.5,
   longSceneSec: 20,
@@ -287,6 +309,55 @@ export function validateSceneManifest(
       );
     }
   }
+  // ── Cast against character definitions ────────────────────────────────
+  // Only when the caller supplies the library: without it, a cast member is
+  // just a name, and a manifest on its own cannot know whether a definition
+  // exists. With it, every reference is checked for existence and for staleness.
+  const library = context.characters;
+  if (library !== undefined) {
+    for (const [position, member] of manifest.cast.entries()) {
+      const at = `cast.${position}`;
+      if (!library.has(member.id)) {
+        issues.push(
+          issue(
+            "unknown_character_definition",
+            `cast member "${member.id}" has no definition in the character library`,
+            {
+              path: `${at}.id`,
+              detail: `library holds: ${library.ids().join(", ") || "nothing"}`,
+            },
+          ),
+        );
+        continue;
+      }
+      const wanted = library.ref(member.id);
+      const recorded = member.definition;
+      if (recorded === undefined) {
+        issues.push(
+          issue(
+            "missing_character_definition",
+            `cast member "${member.id}" does not record the definition it was planned against`,
+            {
+              path: `${at}.definition`,
+              detail: `the library has version ${wanted.version} / ${wanted.hash.slice(0, 12)}`,
+            },
+          ),
+        );
+        continue;
+      }
+      if (recorded.version !== wanted.version || recorded.hash !== wanted.hash) {
+        issues.push(
+          issue(
+            "character_definition_mismatch",
+            `cast member "${member.id}" was planned against version ${recorded.version} / ` +
+              `${recorded.hash.slice(0, 12)} but the library has ${wanted.version} / ${wanted.hash.slice(0, 12)}`,
+            { path: `${at}.definition`, detail: `character ${wanted.characterId}` },
+          ),
+        );
+      }
+    }
+  }
+
   const referencedAssets = new Set(manifest.scenes.flatMap((scene) => scene.media?.assets ?? []));
   for (const asset of manifest.assets) {
     if (!referencedAssets.has(asset.id)) {

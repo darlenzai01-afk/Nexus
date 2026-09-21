@@ -2,7 +2,14 @@ import { FixedClock } from "@nexus/providers";
 import { wordCount } from "@nexus/script";
 import { describe, expect, it } from "vitest";
 
-import { CLOCK_ISO, SCRIPT_HASH, manifestFixture, scriptFixture } from "./fixtures.js";
+import {
+  CHARACTER_DEFINITION_HASH,
+  CLOCK_ISO,
+  SCRIPT_HASH,
+  characterLibraryView,
+  manifestFixture,
+  scriptFixture,
+} from "./fixtures.js";
 import {
   DEFAULT_CAST,
   DEFAULT_TRANSITION_DURATION_SEC,
@@ -454,5 +461,66 @@ describe("the plan document", () => {
     for (const scene of manifest.scenes) {
       expect(["title", "talk", "fact", "media", "quote"]).toContain(legacySceneKind(typeOf(scene)));
     }
+  });
+});
+
+describe("cast from a character library", () => {
+  const plan = (cast: Parameters<typeof buildSceneManifest>[1]["cast"]) =>
+    buildSceneManifest(scriptFixture(), {
+      scriptHash: SCRIPT_HASH,
+      clock: new FixedClock(CLOCK_ISO),
+      cast,
+    });
+
+  it("takes the cast, and the definition references, from the library", () => {
+    const library = characterLibraryView();
+    const manifest = plan(library);
+    expect(manifest.cast).toEqual([
+      {
+        id: "presenter",
+        name: "Character presenter",
+        role: "host",
+        description: "The fixture definition for presenter.",
+        definition: { characterId: "presenter", version: 1, hash: CHARACTER_DEFINITION_HASH },
+      },
+    ]);
+
+    // Every scene that needs a body shows the library's character, and the plan
+    // carries nothing else about it: no palette, no poses, no asset paths.
+    const presenterScenes = manifest.scenes.filter((scene) => scene.characters.length > 0);
+    expect(presenterScenes.length).toBe(4);
+    for (const scene of presenterScenes) {
+      expect(scene.characters.map((entry) => entry.characterId)).toEqual(["presenter"]);
+    }
+    const text = JSON.stringify(manifest);
+    expect(text.includes("palette")).toBe(false);
+    expect(text.includes("poses")).toBe(false);
+
+    const report = validateSceneManifest(manifest, {
+      script: scriptFixture(),
+      characters: library,
+    });
+    expect(report.ok).toBe(true);
+    expect(report.issues).toEqual([]);
+  });
+
+  it("still refuses to plan a presenter scene without a body to show", () => {
+    expect(() => plan(characterLibraryView({ ids: [], cast: [] }))).toThrow(ScenePlanError);
+  });
+
+  it("plans the same manifest from an explicit cast and from a library cast", () => {
+    const library = characterLibraryView();
+    const fromLibrary = plan(library);
+    const explicit = plan([
+      {
+        id: "presenter",
+        name: "Character presenter",
+        role: "host",
+        description: "The fixture definition for presenter.",
+      },
+    ]);
+    expect(fromLibrary.scenes).toEqual(explicit.scenes);
+    expect(fromLibrary.cast[0]?.definition).toBeDefined();
+    expect(explicit.cast[0]?.definition).toBeUndefined();
   });
 });

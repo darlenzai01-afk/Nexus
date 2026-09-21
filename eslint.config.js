@@ -18,4 +18,19 @@ export default tseslint.config(
       ],
     },
   },
+  // Plain-ESM tooling scripts run by `node` (not TypeScript, so no ambient types):
+  // they may use the Node globals they legitimately run with.
+  {
+    files: ["**/tools/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        Buffer: "readonly",
+        TextDecoder: "readonly",
+        TextEncoder: "readonly",
+        URL: "readonly",
+        console: "readonly",
+        process: "readonly",
+      },
+    },
+  },
 );

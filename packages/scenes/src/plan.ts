@@ -35,7 +35,7 @@ import {
   narrationDurationSec,
   sceneDurationDs,
 } from "./timing.js";
-import { validateSceneManifest } from "./validate.js";
+import { validateSceneManifest, type CharacterLibraryView } from "./validate.js";
 
 /**
  * The scene planner (Phase 7): a validated script becomes a **scene manifest** —
@@ -52,15 +52,33 @@ import { validateSceneManifest } from "./validate.js";
  * output of the plan for any script.
  */
 
+/**
+ * Where the cast comes from. Either an explicit list of members, or anything that
+ * can hand one over — `@nexus/characters`' `CharacterLibrary`, whose members carry
+ * a definition reference so the manifest points at a character instead of copying
+ * it.
+ */
+export interface SceneCastSource extends CharacterLibraryView {
+  defaultCast(): readonly SceneCastMember[];
+}
+
+export function isCastSource(
+  cast: readonly SceneCastMember[] | SceneCastSource,
+): cast is SceneCastSource {
+  return !Array.isArray(cast);
+}
+
 export interface ScenePlanOptions {
   /** CAS hash of the script artifact this manifest is planned from. */
   readonly scriptHash: string;
   readonly scriptId?: string;
   /**
-   * Who may appear. Defaults to one presenter: the script never invents a person,
-   * so the cast is input. An empty cast is only allowed when nothing needs a body.
+   * Who may appear: a list of members, or a character library to take them from
+   * (its `defaultCast()`), which also turns on definition checks against that
+   * library. Defaults to one presenter: the script never invents a person, so the
+   * cast is input. An empty cast is only allowed when nothing needs a body.
    */
-  readonly cast?: readonly SceneCastMember[];
+  readonly cast?: readonly SceneCastMember[] | SceneCastSource;
   /** Narration pace; must match the script engine's tuning. */
   readonly wordsPerSecond?: number;
   readonly fps?: number;
@@ -503,7 +521,12 @@ export function buildSceneManifest(script: ScriptDoc, options: ScenePlanOptions)
   }
 
   const clock = options.clock ?? systemClock;
-  const cast = options.cast ?? DEFAULT_CAST;
+  const chosen = options.cast;
+  const castSource: SceneCastSource | undefined =
+    chosen !== undefined && isCastSource(chosen) ? chosen : undefined;
+  const explicit: readonly SceneCastMember[] | undefined =
+    chosen !== undefined && !isCastSource(chosen) ? chosen : undefined;
+  const cast: readonly SceneCastMember[] = castSource?.defaultCast() ?? explicit ?? DEFAULT_CAST;
   const aspect = options.aspect ?? "16:9";
   const resolution = options.resolution ?? DEFAULT_RESOLUTION;
   const orientation: SceneMedia["orientation"] = aspect === "9:16" ? "portrait" : "landscape";
@@ -728,7 +751,11 @@ export function buildSceneManifest(script: ScriptDoc, options: ScenePlanOptions)
   };
 
   // ── validate what we just built, against the script it came from ───────
-  const report = validateSceneManifest(manifest, { script, wordsPerSecond });
+  const report = validateSceneManifest(manifest, {
+    script,
+    wordsPerSecond,
+    characters: castSource,
+  });
   for (const entry of report.issues) {
     const message = `${entry.severity === "hard" ? "error" : "warning"}: ${entry.message}`;
     manifest.warnings.push(message);

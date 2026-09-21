@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CHARACTER_DEFINITION_HASH,
+  characterLibraryView,
   editManifest,
   handWritten,
   handWrittenManifest,
@@ -462,5 +464,62 @@ describe("the issue vocabulary", () => {
     expect(report.issues).toEqual([
       expect.objectContaining({ code: "duration_mismatch", sceneId: "", path: "totalDurationSec" }),
     ]);
+  });
+});
+
+describe("cast against a character library", () => {
+  const withLibrary = (library = characterLibraryView()): SceneValidationContext => ({
+    script,
+    characters: library,
+  });
+
+  it("reports a cast member the library does not define, hard", () => {
+    const report = validateSceneManifest(manifestFixture(), withLibrary());
+    const issue = report.issues.find((entry) => entry.code === "missing_character_definition");
+    expect(issue).toMatchObject({ severity: "soft", path: "cast.0.definition" });
+    expect(issue?.message).toContain("does not record the definition");
+    expect(report.ok).toBe(true);
+  });
+
+  it("checks a recorded definition for staleness", () => {
+    const matching = breakManifest((draft) => {
+      draft.cast[0]!.definition = {
+        characterId: "presenter",
+        version: 1,
+        hash: CHARACTER_DEFINITION_HASH,
+      };
+    }, withLibrary());
+    expect(matching).toMatchObject({ ok: true, issues: [] });
+
+    const stale = breakManifest((draft) => {
+      draft.cast[0]!.definition = {
+        characterId: "presenter",
+        version: 1,
+        hash: "d".repeat(64),
+      };
+    }, withLibrary());
+    expect(stale.ok).toBe(false);
+    const issue = stale.issues.find((entry) => entry.code === "character_definition_mismatch");
+    expect(issue).toMatchObject({ severity: "hard", path: "cast.0.definition" });
+    expect(issue?.message).toContain("was planned against version 1");
+  });
+
+  it("reports a cast member the library has never heard of, hard", () => {
+    const report = validateSceneManifest(
+      manifestFixture(),
+      withLibrary(characterLibraryView({ ids: ["someone_else"] })),
+    );
+    expect(report.ok).toBe(false);
+    expect(codesOf(report)).toContain("unknown_character_definition");
+    const issue = report.issues.find((entry) => entry.code === "unknown_character_definition");
+    expect(issue).toMatchObject({ severity: "hard", path: "cast.0.id" });
+    expect(issue?.detail).toContain("someone_else");
+  });
+
+  it("leaves the character checks off when no library is given", () => {
+    const report = validateSceneManifest(manifestFixture(), context);
+    expect(codesOf(report)).not.toContain("missing_character_definition");
+    expect(codesOf(report)).not.toContain("unknown_character_definition");
+    expect(codesOf(report)).not.toContain("character_definition_mismatch");
   });
 });

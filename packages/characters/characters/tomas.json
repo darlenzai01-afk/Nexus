@@ -1,0 +1,381 @@
+{
+  "version": 1,
+  "id": "tomas",
+  "identity": {
+    "name": "Tomás Reyes",
+    "shortName": "Tomás",
+    "pronoun": "he/him",
+    "description": "Field narrator: films on location, carries a notebook and a camera bag, tells the story of a place from inside it.",
+    "traits": ["observant", "patient", "warm"]
+  },
+  "role": "narrator",
+  "visual": {
+    "canvas": { "width": 512, "height": 1024 },
+    "anchor": { "x": 0.5, "y": 1 },
+    "proportions": {
+      "headRadius": 62,
+      "shoulderWidth": 204,
+      "torsoLength": 226,
+      "armLength": 236,
+      "legLength": 356,
+      "limbWidth": 44
+    },
+    "palette": {
+      "skin": "#d9a06a",
+      "hair": "#3a2a1c",
+      "primary": "#8c4a2f",
+      "secondary": "#4a5240",
+      "accent": "#e8d9a8",
+      "ink": "#191c17",
+      "backdrop": "#dfe4e0"
+    },
+    "hair": { "style": "wavy", "colourKey": "hair" }
+  },
+  "defaultPerformance": {
+    "pose": "stand",
+    "expression": "neutral",
+    "gesture": "point",
+    "clothing": ["field"],
+    "accessories": ["field_bag"]
+  },
+  "poses": [
+    {
+      "id": "stand",
+      "name": "Standing",
+      "description": "Weight settled, feet apart — the resting stance.",
+      "contexts": [],
+      "assets": ["tomas_pose_stand_body", "tomas_pose_stand_arms"]
+    },
+    {
+      "id": "walk",
+      "name": "Walking",
+      "description": "Mid-stride, moving into or out of the frame.",
+      "contexts": ["field"],
+      "assets": ["tomas_pose_walk_body", "tomas_pose_walk_arms"]
+    },
+    {
+      "id": "talk",
+      "name": "Talking",
+      "description": "Turned slightly to camera with the arms brought in towards the chest.",
+      "contexts": ["studio"],
+      "assets": ["tomas_pose_talk_body", "tomas_pose_talk_arms"]
+    }
+  ],
+  "expressions": [
+    {
+      "id": "neutral",
+      "name": "Neutral",
+      "description": "Relaxed face, no particular feeling.",
+      "contexts": [],
+      "assets": ["tomas_expr_neutral"]
+    },
+    {
+      "id": "explaining",
+      "name": "Explaining",
+      "description": "Brows up, mouth open — mid-sentence.",
+      "contexts": ["studio"],
+      "assets": ["tomas_expr_explaining"]
+    },
+    {
+      "id": "engaged",
+      "name": "Engaged",
+      "description": "A slight smile, listening or agreeing.",
+      "contexts": [],
+      "assets": ["tomas_expr_engaged"]
+    },
+    {
+      "id": "surprised",
+      "name": "Surprised",
+      "description": "Wide eyes, small mouth — a reversal in the story.",
+      "contexts": [],
+      "assets": ["tomas_expr_surprised"]
+    }
+  ],
+  "gestures": [
+    {
+      "id": "open_palms",
+      "name": "Open palms",
+      "description": "Both hands open, holding out a slate — 'here is how it works'.",
+      "contexts": ["studio"],
+      "assets": ["tomas_gesture_open_palms_arms", "tomas_gesture_open_palms_prop"]
+    },
+    {
+      "id": "point",
+      "name": "Point",
+      "description": "Right arm extended with a pointer — indicating something off-frame.",
+      "contexts": ["field"],
+      "assets": ["tomas_gesture_point_arms", "tomas_gesture_point_prop"]
+    }
+  ],
+  "clothing": [
+    {
+      "id": "studio",
+      "name": "Studio jacket",
+      "description": "Charcoal jacket over the house colours, lanyard pocket.",
+      "contexts": ["studio"],
+      "assets": ["tomas_cloth_studio"]
+    },
+    {
+      "id": "field",
+      "name": "Field vest",
+      "description": "Utility vest with webbing straps and deep pockets.",
+      "contexts": ["field"],
+      "assets": ["tomas_cloth_field"]
+    }
+  ],
+  "accessories": [
+    {
+      "id": "studio_badge",
+      "name": "Studio badge",
+      "description": "Access badge on a lanyard.",
+      "contexts": ["studio"],
+      "assets": ["tomas_acc_studio_badge"]
+    },
+    {
+      "id": "field_bag",
+      "name": "Camera bag",
+      "description": "Crossbody camera bag on a wide strap.",
+      "contexts": ["field"],
+      "assets": ["tomas_acc_field_bag"]
+    }
+  ],
+  "assets": [
+    {
+      "id": "tomas_plate",
+      "slot": "base",
+      "paints": "plate",
+      "path": "assets/tomas/tomas_plate.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "594108eeac413b49d89903b3571d3ced22810a2d601d79b3cb747058bfa57ef2",
+      "bytes": 298,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "tomas_pose_stand_body",
+      "slot": "pose",
+      "paints": "body",
+      "path": "assets/tomas/tomas_pose_stand_body.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "591d5504d41171cb0e7eb8ed89613dda7f24252ab6797e2cf9fea9c17a3be44b",
+      "bytes": 813,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "tomas_pose_stand_arms",
+      "slot": "pose",
+      "paints": "arms",
+      "path": "assets/tomas/tomas_pose_stand_arms.svg",
+      "kind": "svg",
+      "order": 1,
+      "hash": "efe6b8444bd33dfaaa68603afb1b67abed8a1cb542babab1d7c17e70e4e35e7b",
+      "bytes": 320,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "tomas_pose_walk_body",
+      "slot": "pose",
+      "paints": "body",
+      "path": "assets/tomas/tomas_pose_walk_body.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "8277ca8d91f23dedd001b7f638f76d5dd9fc623781befa9d687969a1a1ae92d5",
+      "bytes": 813,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "tomas_pose_walk_arms",
+      "slot": "pose",
+      "paints": "arms",
+      "path": "assets/tomas/tomas_pose_walk_arms.svg",
+      "kind": "svg",
+      "order": 1,
+      "hash": "c5c66ecc5c47532c0bc3ab2ad5eee4787b44f4ee8cd33d05b8d4c705a6446b89",
+      "bytes": 320,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "tomas_pose_talk_body",
+      "slot": "pose",
+      "paints": "body",
+      "path": "assets/tomas/tomas_pose_talk_body.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "efc7b09f04415028d0edeff4031728dd75d8587988591cd8914cad528dc0075a",
+      "bytes": 813,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "tomas_pose_talk_arms",
+      "slot": "pose",
+      "paints": "arms",
+      "path": "assets/tomas/tomas_pose_talk_arms.svg",
+      "kind": "svg",
+      "order": 1,
+      "hash": "a7358ac5659ee3467aefb62313c2455ba80d57cc3ddcc1cac03d6685a889120f",
+      "bytes": 316,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "tomas_expr_neutral",
+      "slot": "expression",
+      "paints": "face",
+      "path": "assets/tomas/tomas_expr_neutral.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "f19cef65edeacee8c40d353cb21446b4d57d5eefbad8207f59fc765e2aee376f",
+      "bytes": 316,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "tomas_expr_explaining",
+      "slot": "expression",
+      "paints": "face",
+      "path": "assets/tomas/tomas_expr_explaining.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "c9db81b3f9838cb7884b30fb50fa8059b7440266e3984f23ac5ee2e2d3a7d896",
+      "bytes": 478,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "tomas_expr_engaged",
+      "slot": "expression",
+      "paints": "face",
+      "path": "assets/tomas/tomas_expr_engaged.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "23d01471fa073e7c8fc97d9cc4df29065c2dc21cc6693d71b59b6b8b7f95b395",
+      "bytes": 324,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "tomas_expr_surprised",
+      "slot": "expression",
+      "paints": "face",
+      "path": "assets/tomas/tomas_expr_surprised.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "c093f9472af9d46df1f20c2ec806ba366adbe8edd12e179d4c4e4174bd699da7",
+      "bytes": 460,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "tomas_gesture_open_palms_arms",
+      "slot": "gesture",
+      "paints": "arms",
+      "path": "assets/tomas/tomas_gesture_open_palms_arms.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "d834e37b8bdfe94d0b3385ef977dbd57c6c13ae9b803d31e0ad4176caadcf746",
+      "bytes": 316,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "tomas_gesture_open_palms_prop",
+      "slot": "gesture",
+      "paints": "prop",
+      "path": "assets/tomas/tomas_gesture_open_palms_prop.svg",
+      "kind": "svg",
+      "order": 1,
+      "hash": "81eb1f2a0e0e9d3ebc88b504448b8ce5ee7eed7d4e2c3d0a729d66ecf032da08",
+      "bytes": 357,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "tomas_gesture_point_arms",
+      "slot": "gesture",
+      "paints": "arms",
+      "path": "assets/tomas/tomas_gesture_point_arms.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "f4cd5197521049823d5d24eed21e24a4bf785488cb2882c7b1fbe72ab3675b75",
+      "bytes": 320,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "tomas_gesture_point_prop",
+      "slot": "gesture",
+      "paints": "prop",
+      "path": "assets/tomas/tomas_gesture_point_prop.svg",
+      "kind": "svg",
+      "order": 1,
+      "hash": "4dc6df284133662e7751ed0cf4cade3c4c271d9b8d34c75bf73ec6a48eb42420",
+      "bytes": 246,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "tomas_cloth_studio",
+      "slot": "clothing",
+      "paints": "torso",
+      "path": "assets/tomas/tomas_cloth_studio.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "2bf065c2ed1e99a5e397ada5b00cc325cfa7ab39d8524058442593e96347f04f",
+      "bytes": 611,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "tomas_cloth_field",
+      "slot": "clothing",
+      "paints": "torso",
+      "path": "assets/tomas/tomas_cloth_field.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "55ad8548e082f5095d3b58d899195838ff16e6b5c2fe8e7068f5deae4900e4ae",
+      "bytes": 791,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "tomas_acc_studio_badge",
+      "slot": "accessory",
+      "paints": "worn",
+      "path": "assets/tomas/tomas_acc_studio_badge.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "2325fb43346bb07a9896721e3c8e105893ce8530547eca76e1bd4e9f1b78d812",
+      "bytes": 287,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "tomas_acc_field_bag",
+      "slot": "accessory",
+      "paints": "worn",
+      "path": "assets/tomas/tomas_acc_field_bag.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "44ba53f806d497a3a715a217bfb569a2f5451933668871629d43458be8458bec",
+      "bytes": 279,
+      "width": 512,
+      "height": 1024
+    }
+  ],
+  "provenance": {
+    "origin": "generated",
+    "generator": "packages/characters/tools/build-demo-set.mjs",
+    "note": "Flat-shape demonstration art: one SVG per layer, generated deterministically from the proportions in this definition."
+  },
+  "licence": {
+    "kind": "original",
+    "note": "Original character created for the Nexus Forge demonstration set. Not modelled on, named after, or styled after any existing person or channel."
+  }
+}

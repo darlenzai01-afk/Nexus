@@ -10,6 +10,7 @@
     { "path": "./packages/research" },
     { "path": "./packages/script" },
     { "path": "./packages/scenes" },
+    { "path": "./packages/characters" },
     { "path": "./apps/nexus" },
     { "path": "./tests" }
   ]

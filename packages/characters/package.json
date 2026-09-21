@@ -1,0 +1,23 @@
+{
+  "name": "@nexus/characters",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Reusable character system: original character definitions (identity, visual configuration, poses, expressions, gestures, clothing, accessories, asset references), the library that loads and verifies them, deterministic resolution of a performance into an ordered layer stack, and the wiring that lets a scene manifest reference characters without duplicating them.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean"
+  },
+  "dependencies": {
+    "@nexus/scenes": "workspace:*",
+    "@nexus/storage": "workspace:*",
+    "zod": "^3.25.25"
+  }
+}

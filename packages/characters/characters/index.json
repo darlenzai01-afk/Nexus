@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "name": "Nexus Forge demonstration set",
+  "defaultCast": [
+    { "characterId": "maya", "role": "host" },
+    { "characterId": "tomas", "role": "narrator" }
+  ],
+  "characters": ["characters/maya.json", "characters/tomas.json"]
+}
