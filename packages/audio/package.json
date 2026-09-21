@@ -1,0 +1,27 @@
+{
+  "name": "@nexus/audio",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Voice and caption architecture: typed voice configuration over the TTS capability, one synthesis segment per scene, audio artifacts in the CAS, duration metadata verified against the bytes, segment-level caching, retries and coded provider-failure handling \u2014 plus the caption/timing engine that derives cues from the narration and the measured timing (never from a scene), and the `voice` / `captions` stage tasks.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean"
+  },
+  "dependencies": {
+    "@nexus/db": "workspace:*",
+    "@nexus/jobs": "workspace:*",
+    "@nexus/providers": "workspace:*",
+    "@nexus/scenes": "workspace:*",
+    "@nexus/script": "workspace:*",
+    "@nexus/storage": "workspace:*",
+    "zod": "^3.25.25"
+  }
+}

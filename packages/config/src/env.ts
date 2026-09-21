@@ -33,6 +33,21 @@ export const envSchema = z.object({
   NEXUS_STORAGE_PROVIDER: z.string().min(1).default("local"),
   NEXUS_PUBLISHING_PROVIDER: z.string().min(1).default("none"),
 
+  // ── Voice / audio (Phase 10) ───────────────────────────────────────────
+  // Which voice narration is synthesized with. `""` means "whatever the
+  // configured adapter lists first", so an install needs no voice id before it
+  // has a voice account, and a real adapter is never pinned to a fake voice.
+  NEXUS_TTS_VOICE: z.string().default(""),
+  // Container and numbers every synthesized segment is produced with. They
+  // travel into the audio artifact's metadata, so a re-run, a caption pass and a
+  // mux all agree on what the voice actually is.
+  NEXUS_TTS_FORMAT: z.enum(["wav", "mp3"]).default("wav"),
+  NEXUS_TTS_SAMPLE_RATE: z.coerce.number().int().min(8_000).max(48_000).default(24_000),
+  NEXUS_TTS_RATE: z.coerce.number().min(0.5).max(2).default(1),
+  // Segment-level audio reuse: a JSON index path, or "off". A cached clip
+  // survives an edited script, so only the scenes that changed are re-voiced.
+  NEXUS_AUDIO_SEGMENT_CACHE: z.string().min(1).default("off"),
+
   // ── Provider policy (AD-06/AD-13) ──────────────────────────────────────
   // Per-call deadline. Every provider call is bounded; a hung free tier must
   // not stall a stage.
@@ -74,6 +89,15 @@ export interface AppConfig {
     readonly media: string;
     readonly storage: string;
     readonly publishing: string;
+  };
+  /** Voice + audio defaults the `voice` stage synthesizes with (Phase 10). */
+  readonly audio: {
+    readonly voice: string;
+    readonly format: "wav" | "mp3";
+    readonly sampleRate: number;
+    readonly rate: number;
+    /** `"off"`, or a path to the segment-cache index. */
+    readonly segmentCache: string;
   };
   /** Provider call policy: deadlines, retries, caching, budget degradation. */
   readonly providerPolicy: {
@@ -152,6 +176,13 @@ export function loadEnv(options: LoadEnvOptions = {}): AppConfig {
       media: parsed.NEXUS_MEDIA_PROVIDER,
       storage: parsed.NEXUS_STORAGE_PROVIDER,
       publishing: parsed.NEXUS_PUBLISHING_PROVIDER,
+    },
+    audio: {
+      voice: parsed.NEXUS_TTS_VOICE,
+      format: parsed.NEXUS_TTS_FORMAT,
+      sampleRate: parsed.NEXUS_TTS_SAMPLE_RATE,
+      rate: parsed.NEXUS_TTS_RATE,
+      segmentCache: parsed.NEXUS_AUDIO_SEGMENT_CACHE,
     },
     providerPolicy: {
       timeoutMs: parsed.NEXUS_PROVIDER_TIMEOUT_MS,

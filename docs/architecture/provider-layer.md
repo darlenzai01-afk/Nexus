@@ -190,7 +190,10 @@ re-pinning a model produces a cache miss instead of a stale answer.
 
 - **Real research/TTS/media/publishing adapters.** The interfaces and the fake
   implementations are the deliverable; vendor selection is pending (OD-2, OD-3,
-  OD-5, OD-8) and free-tier access is the operator's decision.
+  OD-5, OD-8) and free-tier access is the operator's decision. The voice stage
+  (Phase 10, `docs/architecture/audio-captions.md`) is the first consumer of the
+  `tts` capability: it synthesizes one clip per scene through it, and the
+  fake/manual adapters are what its tests run against.
 - **HTTP routes, app wiring and task registration.** The container is constructed
   by tests only; `apps/nexus` still runs the Phase 1 entrypoints (GAP-9).
 - **Enforcement at the task layer.** The budget guard decides; the tasks that act

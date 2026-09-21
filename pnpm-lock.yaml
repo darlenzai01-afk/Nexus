@@ -45,6 +45,30 @@ importers:
         specifier: ^5.0.0
         version: 5.12.5
 
+  packages/audio:
+    dependencies:
+      '@nexus/db':
+        specifier: workspace:*
+        version: link:../db
+      '@nexus/jobs':
+        specifier: workspace:*
+        version: link:../jobs
+      '@nexus/providers':
+        specifier: workspace:*
+        version: link:../providers
+      '@nexus/scenes':
+        specifier: workspace:*
+        version: link:../scenes
+      '@nexus/script':
+        specifier: workspace:*
+        version: link:../script
+      '@nexus/storage':
+        specifier: workspace:*
+        version: link:../storage
+      zod:
+        specifier: ^3.25.25
+        version: 3.25.76
+
   packages/characters:
     dependencies:
       '@nexus/scenes':

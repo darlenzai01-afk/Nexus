@@ -11,6 +11,7 @@
     { "path": "./packages/script" },
     { "path": "./packages/scenes" },
     { "path": "./packages/characters" },
+    { "path": "./packages/audio" },
     { "path": "./packages/render" },
     { "path": "./apps/nexus" },
     { "path": "./tests" }

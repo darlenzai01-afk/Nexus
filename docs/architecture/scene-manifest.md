@@ -325,6 +325,10 @@ paid call, no rendering:
 - `docs/architecture/job-orchestration.md` — stages, fingerprints, artifact reuse.
 - `docs/plans/000-architecture-discovery.md` §6.1 / §11 — the scene-graph intent.
 - `docs/architecture/render-engine.md` — what a frame does with this document.
+- `docs/architecture/audio-captions.md` — the narration this document carries is
+  what the `voice` stage speaks and the `captions` stage derives its cues from
+  (including the sentence ids it puts next to them).
 - `docs/plans/ISSUES.md` — OD-19…OD-21 (planning), GAP-20…GAP-23, CI-17…CI-21, the
-  phase 8 entries OD-22…OD-23, GAP-24…GAP-26, CI-22…CI-24, and the phase 9 entries
-  OD-24…OD-26, GAP-27…GAP-33, CI-25…CI-29.
+  phase 8 entries OD-22…OD-23, GAP-24…GAP-26, CI-22…CI-24, the phase 9 entries
+  OD-24…OD-26, GAP-27…GAP-33, CI-25…CI-29, and the phase 10 entries OD-27…OD-29,
+  GAP-34…GAP-37, CI-30…CI-36.

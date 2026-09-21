@@ -4,12 +4,15 @@ Cloud-first automated video production system: topic → research → fact-check
 → script → scenes → media → voice → captions → render → QA → **human
 approval** → publish, plus a long-form → Shorts repurposing pipeline.
 
-> **Status: research → script → scene plan → characters → composition.**
+> **Status: research → script → scene plan → characters → composition → voice
+> → captions.**
 > The provider layer, the job orchestrator, the research engine, the script
-> engine, the scene planner, the character system and the animation/composition
-> engine are delivered and tested offline. Nothing speaks, publishes or writes a
-> video file yet: the voice, media and caption stages and the rasteriser/encoder
-> are still to come. The architecture is fully planned in
+> engine, the scene planner, the character system, the animation/composition
+> engine and the voice/caption architecture are delivered and tested offline — a
+> deterministic fake voice writes real audio into the CAS, so the whole audio
+> path runs with no key and no paid call. Nothing publishes or writes a video
+> file yet: the media stage and the rasteriser/encoder are still to come. The
+> architecture is fully planned in
 > [`docs/plans/000-architecture-discovery.md`](docs/plans/000-architecture-discovery.md)
 > with binding decisions in [`docs/plans/000-decisions.md`](docs/plans/000-decisions.md).
 
@@ -67,6 +70,14 @@ packages/
                     # (blocking, camera, animation events, text, transitions,
                     # pose/expression) -> SVG, with a coded diagnostic list and a
                     # one-scene demonstration wired end to end
+  audio/            # The voice + caption architecture (Phase 10): typed voice
+                    # configuration (casting) over the TTS capability, one synthesis
+                    # segment per scene, clips in the CAS, duration metadata verified
+                    # against the bytes, a segment cache, retries and coded
+                    # provider-failure handling — plus the timing document captions
+                    # and the renderer read, the cue engine that *derives* captions
+                    # from the narration and that timing (never embedded per scene),
+                    # and the `voice` / `captions` stage tasks
 services/           # Intentionally empty — no microservices (AD-01); see its README
 infrastructure/     # Deployment assets (systemd/Docker/litestream) — added in later phases
 tests/              # Cross-package integration tests (unit tests live beside sources)
@@ -147,6 +158,7 @@ binds to `127.0.0.1` by default — no public surface.
 | —          | **Session 7:** scene manifest (script → six scene types)    | ✅ delivered (`docs/architecture/scene-manifest.md`)                    |
 | —          | **Session 8:** character system (reusable original cast)    | ✅ delivered (`docs/architecture/character-system.md`)                  |
 | —          | **Session 9:** animation & composition engine (one scene)   | ✅ delivered (`docs/architecture/render-engine.md`)                     |
+| —          | **Session 10:** voice + caption/timing architecture         | ✅ delivered (`docs/architecture/audio-captions.md`)                    |
 | 1          | Hard loop: script → scene graph → voice → captions → render | scene graph ✅ (Session 7); voice/render next (OD-1 Remotion, OD-2 TTS) |
 | 2          | Research + fact-check with claim/evidence traceability      | research ✅, script ✅, scenes ✅; `fact_check` stage pending           |
 | 3          | Full long-form pipeline + media/license engine              | pending                                                                 |
@@ -205,7 +217,21 @@ pose / expression, on-screen text with counting, typing and fitting, and the
 trailing transition seam), and those frames become SVG — with the demonstration
 scene (`packages/render/demo/scene.json`: two characters, 12 events, 345 frames)
 walked end to end from manifest to composited scene, and no video pipeline —
-[`docs/architecture/render-engine.md`](docs/architecture/render-engine.md).
+[`docs/architecture/render-engine.md`](docs/architecture/render-engine.md);
+and (i) the voice architecture — `@nexus/audio`: a scene manifest plus a voice
+casting become one synthesis segment per scene, clips in the CAS and an audio
+track whose durations are _measured_ (a WAV header or an MP3 frame header, never
+trusted from the adapter alone), with segment-level caching, a deterministic
+retry budget, coded provider-failure handling that parks the job for an operator
+to supply the clips that failed, and the sentence/scene timing document that
+captions and the renderer read —
+[`docs/architecture/audio-captions.md`](docs/architecture/audio-captions.md); and
+(j) the caption/timing architecture — the same package's cue engine: captions
+**derived** from a scene's narration and its measured window (never a caption
+typed into a scene), wrapped to safe line lengths at word boundaries, held when
+they would flash by, split when they would sit too long and reported when they
+read too fast, published as a `captions` artifact with the `captions` stage task
+[`docs/architecture/audio-captions.md`](docs/architecture/audio-captions.md).
 These sit before plan-Phase 1 because every later step depends on typed
 artifacts and crash-resumable, non-duplicating jobs.
 
@@ -226,6 +252,19 @@ published and plans deterministically (the same script plans the same scenes
 every time), so `pnpm verify` — and any re-plan — costs nothing and touches no
 network. It stores one `scene_graph` artifact and never writes `scenes` rows
 (OD-19).
+
+The `voice` stage is the first one that speaks: it reads the manifest the plan
+stage published and synthesizes one clip per scene through the `tts` capability,
+so `NEXUS_TTS_PROVIDER=fake` (the default) runs the whole path offline against a
+deterministic WAV writer and a real adapter can be configured later without
+touching the stage. `NEXUS_TTS_VOICE` (empty = the adapter's own first voice),
+`NEXUS_TTS_FORMAT`/`NEXUS_TTS_SAMPLE_RATE`/`NEXUS_TTS_RATE` and
+`NEXUS_AUDIO_SEGMENT_CACHE` (off, or a path to a segment index) are its only
+knobs; when a scene cannot be voiced the stage parks the job at `MANUAL_INPUT`
+with instructions (`params.operatorAudio`) rather than shipping a silent scene.
+The `captions` stage needs no provider at all — it derives cues from the narration
+and the audio track the voice stage published, and the same track always produces
+the same subtitles.
 
 The character system needs no provider either, and adds no configuration of its
 own: `CharacterLibrary.load({verifyAssets: true})` reads the bundled original cast

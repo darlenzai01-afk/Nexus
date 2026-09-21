@@ -36,6 +36,15 @@ describe("loadEnv", () => {
       defaultLlmModel: "meta-llama/llama-3.1-8b-instruct",
     });
     expect(path.isAbsolute(config.dataDir)).toBe(true);
+    // The voice defaults are the ones `@nexus/audio` documents: wav at 24 kHz,
+    // the adapter's own first voice ("" = let it choose) and no segment cache.
+    expect(config.audio).toEqual({
+      voice: "",
+      format: "wav",
+      sampleRate: 24_000,
+      rate: 1,
+      segmentCache: "off",
+    });
   });
 
   it("applies and coerces valid overrides", () => {
@@ -91,6 +100,37 @@ describe("loadEnv", () => {
       llmBaseUrl: "https://api.groq.com/openai/v1",
       defaultLlmModel: "llama-3.1-8b-instant",
     });
+  });
+
+  it("accepts the whole voice surface (voice, container, sample rate, rate, cache)", () => {
+    const config = loadEnv({
+      env: {
+        NEXUS_TTS_VOICE: "aurora",
+        NEXUS_TTS_FORMAT: "mp3",
+        NEXUS_TTS_SAMPLE_RATE: "44100",
+        NEXUS_TTS_RATE: "0.9",
+        NEXUS_AUDIO_SEGMENT_CACHE: "/var/lib/nexus/segments.json",
+      },
+    });
+
+    expect(config.audio).toEqual({
+      voice: "aurora",
+      format: "mp3",
+      sampleRate: 44_100,
+      rate: 0.9,
+      segmentCache: "/var/lib/nexus/segments.json",
+    });
+  });
+
+  it("rejects a nonsense voice option instead of guessing", () => {
+    // A container the probes cannot verify, a sample rate no adapter would
+    // honour, and a pace outside the plausible range all fail at startup.
+    expect(() => loadEnv({ env: { NEXUS_TTS_FORMAT: "ogg" } })).toThrow(/NEXUS_TTS_FORMAT/);
+    expect(() => loadEnv({ env: { NEXUS_TTS_SAMPLE_RATE: "500" } })).toThrow(EnvValidationError);
+    expect(() => loadEnv({ env: { NEXUS_TTS_SAMPLE_RATE: "96000" } })).toThrow(EnvValidationError);
+    expect(() => loadEnv({ env: { NEXUS_TTS_RATE: "0" } })).toThrow(EnvValidationError);
+    expect(() => loadEnv({ env: { NEXUS_TTS_RATE: "3" } })).toThrow(EnvValidationError);
+    expect(() => loadEnv({ env: { NEXUS_AUDIO_SEGMENT_CACHE: "" } })).toThrow(EnvValidationError);
   });
 
   it("rejects a nonsense provider policy instead of guessing", () => {
