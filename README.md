@@ -39,6 +39,10 @@ packages/
                     # human-in-the-loop fallbacks
   jobs/             # Persistent job orchestration: state machines, stage graph,
                     # fingerprints, retry/backoff, artifact reuse, worker loop
+  research/         # The research engine (Phase 5): topic → structured research
+                    # package (questions, sources, verbatim evidence, factual
+                    # claims, claim/source links, conflicts, verification status,
+                    # provenance) plus the pipeline's `research` stage task
 services/           # Intentionally empty — no microservices (AD-01); see its README
 infrastructure/     # Deployment assets (systemd/Docker/litestream) — added in later phases
 tests/              # Cross-package integration tests (unit tests live beside sources)
@@ -108,30 +112,37 @@ binds to `127.0.0.1` by default — no public surface.
 
 ## Roadmap (from the approved plan)
 
-| Plan phase | Scope                                                       | State                                                   |
-| ---------- | ----------------------------------------------------------- | ------------------------------------------------------- |
-| 0          | Monorepo, config, tooling, CI, app/worker entrypoints       | ✅ delivered                                            |
-| —          | **Session 2:** domain schemas + persistence foundation      | ✅ delivered (`docs/architecture/domain-model.md`)      |
-| —          | **Session 3:** persistent job orchestration foundation      | ✅ delivered (`docs/architecture/job-orchestration.md`) |
-| —          | **Session 4:** provider abstraction layer (AD-06/12/13)     | ✅ delivered (`docs/architecture/provider-layer.md`)    |
-| 1          | Hard loop: script → scene graph → voice → captions → render | next (blocked on OD-1 Remotion, OD-2 TTS)               |
-| 2          | Research + fact-check with claim/evidence traceability      | pending                                                 |
-| 3          | Full long-form pipeline + media/license engine              | pending                                                 |
-| 4          | Shorts pipeline (9:16 re-render from scene graph)           | pending                                                 |
-| 5          | Publishing (upload kit first, YouTube API after audit)      | pending                                                 |
+| Plan phase | Scope                                                       | State                                                    |
+| ---------- | ----------------------------------------------------------- | -------------------------------------------------------- |
+| 0          | Monorepo, config, tooling, CI, app/worker entrypoints       | ✅ delivered                                             |
+| —          | **Session 2:** domain schemas + persistence foundation      | ✅ delivered (`docs/architecture/domain-model.md`)       |
+| —          | **Session 3:** persistent job orchestration foundation      | ✅ delivered (`docs/architecture/job-orchestration.md`)  |
+| —          | **Session 4:** provider abstraction layer (AD-06/12/13)     | ✅ delivered (`docs/architecture/provider-layer.md`)     |
+| —          | **Session 5:** research engine (topic → research package)   | ✅ delivered (`docs/architecture/research-engine.md`)    |
+| 1          | Hard loop: script → scene graph → voice → captions → render | next (blocked on OD-1 Remotion, OD-2 TTS)                |
+| 2          | Research + fact-check with claim/evidence traceability      | research engine ✅ delivered; `fact_check` stage pending |
+| 3          | Full long-form pipeline + media/license engine              | pending                                                  |
+| 4          | Shorts pipeline (9:16 re-render from scene graph)           | pending                                                  |
+| 5          | Publishing (upload kit first, YouTube API after audit)      | pending                                                  |
 
 **Delivered so far on this branch:** (a) the provider layer — six capability
 interfaces with a registry, a quota-aware `invoke()` pipeline, deterministic
 fakes and human-in-the-loop fallbacks, so the pipeline is buildable and testable
 with no API keys and no network —
 [`docs/architecture/provider-layer.md`](docs/architecture/provider-layer.md);
-(b) the domain model + persistence foundation — versioned migrations, typed/validated schemas, provenance-tracked
-artifacts (CAS hashes, never blobs) —
-[`docs/architecture/domain-model.md`](docs/architecture/domain-model.md); and
-(b) the persistent job orchestration foundation — three state machines, the
+(b) the domain model + persistence foundation — versioned migrations,
+typed/validated schemas, provenance-tracked artifacts (CAS hashes, never blobs) —
+[`docs/architecture/domain-model.md`](docs/architecture/domain-model.md);
+(c) the persistent job orchestration foundation — three state machines, the
 versioned stage graph, content-fingerprint idempotency, retry/backoff, artifact
 reuse without re-execution, gates, job logs and the worker/task abstraction —
-[`docs/architecture/job-orchestration.md`](docs/architecture/job-orchestration.md).
+[`docs/architecture/job-orchestration.md`](docs/architecture/job-orchestration.md);
+and (d) the research engine — `topic → research package` with research questions,
+deduplicated sources and metadata, evidence whose every quotation is sliced out
+of the retrieved source, factual claims with claim/source relationships,
+preserved conflicts, deterministic verification status and full provenance
+(which step used AI, which was code) —
+[`docs/architecture/research-engine.md`](docs/architecture/research-engine.md).
 These sit before plan-Phase 1 because every later step depends on typed
 artifacts and crash-resumable, non-duplicating jobs.
 
@@ -140,6 +151,12 @@ adapter per capability (`none`/`fake`/`manual`/real), `NEXUS_PROVIDER_*` sets th
 call policy (timeout, attempts, cache, degrade ratio), and credentials are read
 from the environment by _name_ only (AD-12). See
 [`.env.example`](.env.example) for the full surface.
+
+The research stage uses the `llm` and `research` capabilities and adds no
+configuration of its own: `NEXUS_LLM_PROVIDER=fake NEXUS_RESEARCH_PROVIDER=fake`
+runs the whole engine offline, and with no search provider configured the stage
+parks the job at `MANUAL_INPUT` so an operator can paste sources
+(`params.operatorSources`) instead of the engine inventing any.
 
 Open decisions that block Phase 1 (Remotion licensing, TTS provider) are
 tracked in [`docs/plans/000-decisions.md`](docs/plans/000-decisions.md#open-decisions-must-be-resolved-at-the-named-gate);

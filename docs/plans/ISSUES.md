@@ -7,7 +7,7 @@ after the phases are complete (per operator instruction).
 Legend: 🔴 failed/blocked · 🟡 pending (needs input/credentials/external) ·
 🟠 unresolved risk · 🟢 resolved
 
-Last updated: end of **Phase 4** (provider abstraction layer).
+Last updated: end of **Phase 5** (research engine).
 
 ---
 
@@ -57,6 +57,30 @@ Last updated: end of **Phase 4** (provider abstraction layer).
 | Not every real provider implemented | 🟢 | Only `openai-compatible` (covers any OpenAI-shaped endpoint by base URL) and `local` storage; research/TTS/media/publishing real adapters await the vendor decisions (OD-2/3/5/8). |
 | No paid dependencies added | 🟢 | No new runtime dependencies at all: Node built-ins + the existing zod/workspace packages. |
 
+## Phase 5 — status of the requested items
+
+| Requested | Status | Notes |
+|-----------|--------|-------|
+| Input: a topic | 🟢 | `runResearch({topic, outline?, episodeId?, projectId?, operatorSources?}, {llm, research, clock})`; the `research` stage task takes the topic from the episode. |
+| Output: a structured research package | 🟢 | One zod-validated document (`ResearchPackageSchema`, version 1) stored as a CAS artifact, registered as `kind: "document"` with `generatedBy` provenance. Package hash is fed downstream in the step output. |
+| Research questions | 🟢 | `plan` step (AI): questions + search queries, deduplicated, capped; the planner's queries are used as-is (extra question-text query only as a fallback), so metered search calls stay minimal. |
+| Sources | 🟢 | `discover`: provider search rows only, URL-validated (`assertPublicHttpUrl`) and canonicalised; operator-pasted sources are marked `operator_text`. |
+| Source metadata | 🟢 | Canonical + original URL, domain, title, publisher/adapter, `publishedAt`, `retrievedAt`, content + sha256 + length, `retrieval` honesty tag, questions that surfaced it. |
+| Relevant evidence | 🟢 | `extract` (AI) proposes; code verifies. Every excerpt is `source.content.slice(start, end)` with its locator — a model quote that cannot be located is dropped (`quote_not_found`). |
+| Factual claims | 🟢 | One assertable statement per claim, canonical wording chosen deterministically from the merged variants. |
+| Claim/source relationships | 🟢 | `claim.links[]` (source, evidence, stance `supports\|contradicts\|mentions`, model-reported strength, rationale) + derived `corroboration`. |
+| Conflicting information | 🟢 | `conflicts[]` with both sides (`detectedBy: model` for claim-vs-claim, `evidence_stance` for a quote-verified refutation), `preserved: true`, both claims marked `contested`. Unverifiable refutations are dropped, never quoted. |
+| Confidence / verification status | 🟢 | Deterministic `evaluate`: `status` (`supported`/`contradicted`/`unverified`/`unsupportable` — the same vocabulary as `claims.status`), `confidence` 0–1 from corroboration with caps for dispute/contested, `certainty`, `mayStateAsFact`, and the gate (`reviewRequired`, `blockingClaimIds`). |
+| Provenance | 🟢 | Engine + schema version, adapters per capability, per-step trace (which used AI, which was code, calls, cache hits, units, outcome, notes), model + template version per AI step, `generatedBy` on evidence and on the artifact row. |
+| Never invent sources | 🟢 | A source exists only because a provider row passed validation; refusals are recorded in `dropped[]`; an empty result parks the job at `MANUAL_INPUT` instead of filling the gap. |
+| Never invent quotations | 🟢 | Quotes are located in the retrieved text and the stored excerpt is the source's own characters with offsets (tested by re-slicing every excerpt). |
+| Never present uncertain claims as established facts | 🟢 | `mayStateAsFact` is true only for corroborated, uncontested claims; the package reports `reviewRequired` + `blockingClaimIds`, and an empty package can never look like a passed gate. |
+| Preserve disagreement | 🟢 | Conflicts are never resolved: both sides are kept, both claims are `contested`/`disputed`, and confidence is capped rather than decided. |
+| AI only where reasoning/synthesis is needed | 🟢 | Four AI steps (plan, extract, reconcile, conflicts); all parsing, validation, dedup, storage, scoring, status derivation and assembly are code. |
+| Deterministic code for deterministic operations | 🟢 | URL canonicalisation/dedup (by canonical URL and by content hash), quote verification, claim merging, scoring, ids derived from content, schema validation on write and read. Same clock + same answers ⇒ byte-identical package (tested). |
+| Testing with mock providers | 🟢 | 4 files / 42 tests, no network and no keys: successful research, empty result, malformed provider output, timeout, rate limit, conflicting sources, duplicate sources, invalid URLs — plus scoring, the stage inside `runJob`, and one run on the bundled `FakeResearchProvider`. |
+| No script engine built | 🟢 | Nothing beyond the `research` stage: no script generation, no `claims` rows, no `fact_check` stage. |
+
 ## Decisions taken under uncertainty (provisional — please ratify or reject)
 
 | ID    | Status | Description |
@@ -71,6 +95,7 @@ Last updated: end of **Phase 4** (provider abstraction layer).
 | OD-12 | 🟡 | **Ad-hoc gates vs the plan's states:** plan §7.1 names optional gates `RESEARCH_REVIEW` / `SCRIPT_REVIEW` as episode states; only `FACT_REVIEW` exists in the Phase 2 episode enum. Implemented instead as *job-level* gates (`waiting_gate` + stage WAITING), which any task can request (`{ waiting: "FACT_REVIEW" }`) without a schema change. Ratify, or add the missing episode states in a future migration (needs the same table-rebuild approval as OD-10). |
 | OD-13 | 🟡 | **`storage` has no `manual` adapter** (it is the one exemption from AD-06's "every interface ships a Manual fallback"). Rationale: a human cannot stand in for a disk, and the `local` adapter has no quota to exhaust, so there is no state to degrade *to*. The capability still has `none`/`fake`/**real** (`local`) and is the only one configured by default. Ratify, or ask for a manual storage stub that refuses with instructions. |
 | OD-14 | 🟡 | **Only one real LLM adapter ships, and it is vendor-neutral by construction.** `openai-compatible` speaks the OpenAI chat-completions shape, so OpenRouter/Groq/Together/Ollama/llama.cpp are all one base URL away; AD-03's "no coupling to a single AI company" is satisfied by the interface plus the configuration, not by writing N vendor clients before a provider is chosen. Addresses OD-2/OD-3 without spending quota. |
+| OD-15 | 🟡 | **Research claims are not written to the `claims` table.** That table is keyed by `script_id` + `sentence_id` (NOT NULL), so a pre-script claim has no row to live in; Phase 5 keeps claims inside the package artifact (CAS, `kind: 'document'`) and copies their sources into `sources`/`episode_sources`. Consequence: claim/evidence traceability is complete inside the artifact, and the `claims`/`claim_evidence` rows arrive with the script stage (each script sentence then references the package claims it came from). Ratify, or approve (a) nullable `script_id` on `claims` — a table rebuild, approval-gated like OD-10 — or (b) a new `research_claims` table. |
 | OD-9  | 🟡 | **Persistence implementation deviates from AD-04's wording**: AD-04 named *Drizzle ORM*; Phase 2 implements plain SQL DDL + a hand-written migration runner + zod validation on `node:sqlite`. Rationale: zero native deps, full control of the drift guard, no codegen step, and the SQL stays Postgres-portable. Ratify (amend AD-04) or ask for Drizzle — porting is confined to `packages/db`. |
 
 ## Implementation gaps (deliberate, phase-appropriate)
@@ -90,6 +115,8 @@ Last updated: end of **Phase 4** (provider abstraction layer).
 | GAP-12 | 🟡 | **Storage `list()` reads a directory, not the DB.** `LocalStorageProvider.list()` / `CasStore.list()` enumerate blobs on disk, which over-reports blobs that no `artifacts` row references (and cannot see rows whose bytes are gone). The reconciler that diffs the two is GAP-7; until then, treat `list()` as "bytes present", not "artifacts known". |
 | GAP-13 | 🟡 | **Provider cache has no eviction.** `<dataDir>/cache/providers` grows with every distinct prompt/query; entries are content-addressed JSON and cheap, but an LRU/TTL sweep (or a `cache_keep_days` setting) is needed before a long-running deployment. Caught by: nothing yet — flagged proactively with the CAS GC work (GAP-7). |
 | GAP-14 | 🟡 | **Metering is opt-in per adapter.** Adapters with no `provider_accounts` row are allowed without limits (deliberate: a local fake has no quota). A real provider therefore needs its account row seeded before its free tier is protected; the dashboard/CLI path that seeds accounts is not written yet. |
+| GAP-15 | 🟠 | **Evidence is snippet-only.** There is no page-content fetch + HTML-extraction capability yet, so a source's quotable text is whatever the search provider returned (or what an operator pasted). The package records this per source (`retrieval: provider_snippet \| operator_text \| unavailable`), and a source with no text contributes no evidence — but the verification depth is limited by snippet length. Mitigation planned: a `fetch(url) → text` capability (behind the same provider interface, with the SSRF guard), added when a real research adapter lands. |
+| GAP-16 | 🟡 | **The verification gate is reported, not enforced.** `verification.reviewRequired` / `blockingClaimIds` are computed and logged, but the `fact_check` stage that parks a job at `FACT_REVIEW` is not built (Phase 6+), and no HTTP surface exposes a package for review (GAP-1). Also: no *real* research adapter yet (`none`/`fake`/`manual` only), and no semantic re-check of a finished script's claims against the package. |
 | GAP-10 | 🟢 | No duplicate-execution protection was needed at the DB level beyond the fingerprint checks and lease claiming; a partial unique index on `(input_hash, step_key)` for DONE steps was *considered and rejected* — legitimate re-runs (invalidation → re-execute → new checkpoint) and multi-job reuse both need more than one row per fingerprint, so uniqueness would break repairability. |
 
 ## Test / CI incidents
@@ -104,4 +131,7 @@ Last updated: end of **Phase 4** (provider abstraction layer).
 | CI-7  | 🟢 | **A quota counter counted its own probes** (Phase 4): `FakePublishProvider` derived "uploads today" from `providerUsageSince().calls`, so every `quota()` lookup consumed allowance. Fixed by counting only successful `publish.upload` rows in the call log; a test asserts probes and refused uploads do not count. |
 | CI-8  | 🟢 | **A verification test exposed a fake announcing the wrong name** (Phase 4): the in-memory storage adapter defaulted its id to `"memory"` while registered as `"fake"`, which would have made metering and logs disagree with configuration. Fixed (the container passes the registration id); the shared contract suite now asserts every adapter's `id`/`kind`/`mode`/`label` match its descriptor. |
 | CI-9  | 🟢 | **Credential echo** (Phase 4): a provider that repeats the API key in a response body leaked it into logs and `provider_call_log.error`. Fixed with `makeRedactor([...])` (patterns *plus* the actual credential values), applied to every error path; tested end to end with a container built from the real config. |
+| CI-10 | 🟢 | **The engine spent metered searches it did not need to** (Phase 5): every question issued its declared queries *plus* the question text as a third query, so each question cost two search calls (and doubled duplicate-rejection rows). Caught by tests asserting drop counts. Fixed: the planner's queries are used as-is; the question text is only a fallback when a planner returns none. |
+| CI-11 | 🟢 | **Provenance overstated AI usage** (Phase 5): `provenance.aiSteps` listed every step whose engine was `llm`, including a `reconcile`/`conflicts` step that was skipped because there was nothing to compare — i.e. the audit trail claimed a model call that never happened. Fixed: a step counts as an AI step only if it called a model or failed trying. |
+| CI-12 | 🟢 | **An empty package passed the gate vacuously** (Phase 5): `reviewRequired` was derived from unsupported *claims*, so a run with zero claims (and zero sources) reported `reviewRequired: false` — the one case where the gate matters most. Fixed: a package with no claims always requires review. |
 | CI-5  | 🟢 | `Worker.stop()` could wait forever for a task that ignores its abort signal (caught by a test that hung). Fixed with a bounded `stop({ timeoutMs })` plus a `worker.stop_timeout` warning; the job stays leased and recoverable. |

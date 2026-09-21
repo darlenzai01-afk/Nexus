@@ -16,6 +16,7 @@ export default defineConfig({
       "@nexus/storage": resolveFromRoot("./packages/storage/src/index.ts"),
       "@nexus/jobs": resolveFromRoot("./packages/jobs/src/index.ts"),
       "@nexus/providers": resolveFromRoot("./packages/providers/src/index.ts"),
+      "@nexus/research": resolveFromRoot("./packages/research/src/index.ts"),
     },
   },
   test: {

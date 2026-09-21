@@ -1,0 +1,25 @@
+{
+  "name": "@nexus/research",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Research engine: topic → structured research package (questions, sources, verbatim evidence, factual claims, claim/source relationships, conflicts, verification status, provenance). Deterministic parsing, validation, deduplication and storage; AI only for synthesis and reasoning.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean"
+  },
+  "dependencies": {
+    "@nexus/db": "workspace:*",
+    "@nexus/jobs": "workspace:*",
+    "@nexus/providers": "workspace:*",
+    "@nexus/storage": "workspace:*",
+    "zod": "^3.25.0"
+  }
+}
