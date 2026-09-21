@@ -197,9 +197,11 @@ the renderer's future sync. Strict schema, unknown field = parse error.
 | `provenance`             | `nexus-audio 1.0.0`; `aiSteps: ["voice.synthesize"]` — the voice is the only model in the file, which is what makes the audit trail true (AD-12)                                                            |
 
 Persistence registers the **clips** the track names as `audio` artifacts (role
-`voice_segment`, meta `{durationSec, codec}`) and the **track** as one more (role
-`voice_track`); `registerArtifact` is idempotent by hash, so an operator's clip and a
-synthesized one both register exactly once. `loadAudioTrack`/`readSegmentAudio` read
+`voice_segment`, meta `{durationSec, codec: "pcm_s16le" | "mp3"}`) and the **track**
+as one more (role `voice_track`, meta `{durationSec, codec: "json"}` — it is the
+document that describes the audio, not playable bytes; `codec` always names what the
+artifact's own bytes are); `registerArtifact` is idempotent by hash, so an operator's
+clip and a synthesized one both register exactly once. `loadAudioTrack`/`readSegmentAudio` read
 them back; nothing downstream needs the database to read an episode's audio.
 
 ## 8. Captions are derived, never authored (`captions.ts`)
@@ -252,7 +254,8 @@ moment, which is what a renderer and the mux QA pass need.
 The stage is deliberately thin, because the interesting work is a _derivation_, not a
 generation: it reads the audio track the `voice` stage published (one artifact — the
 cue text is already in it, sentence by sentence, as it was spoken), computes the cues,
-and registers the result as a `captions` artifact (meta `{durationSec, codec: "webvtt"}`).
+and registers the result as a `captions` artifact (meta `{durationSec, codec: "json"}`
+— the bytes are the caption document, not a `.vtt` yet).
 There is no model call, no operator input and nothing to park on: the same audio track
 always produces the same bytes, so an unchanged episode adopts its previous artifact
 (`validateReuse` refuses one derived from other audio, or one that leaves a scene

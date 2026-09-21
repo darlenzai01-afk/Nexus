@@ -190,7 +190,7 @@ describe("captions stage task", () => {
     expect(refs).toEqual([expect.objectContaining({ kind: "captions", role: "caption_track" })]);
     const artifact = repo.getArtifact(refs[0]!.hash)!;
     expect(artifact.kind).toBe("captions");
-    expect(JSON.parse(artifact.meta)).toMatchObject({ durationSec: 5.12, codec: "webvtt" });
+    expect(JSON.parse(artifact.meta)).toMatchObject({ durationSec: 5.12, codec: "json" });
 
     // The document in the CAS is derived from the audio track, and nothing in it
     // was typed: captions carry the narration the voice stage spoke.

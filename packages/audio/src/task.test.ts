@@ -153,7 +153,7 @@ describe("voice stage task", () => {
 
     const artifact = repo.getArtifact(refs[0]!.hash)!;
     expect(artifact.kind).toBe("audio");
-    expect(JSON.parse(artifact.meta)).toMatchObject({ durationSec: 5.12, codec: "pcm_s16le" });
+    expect(JSON.parse(artifact.meta)).toMatchObject({ durationSec: 5.12, codec: "json" });
     // Every clip the track names is registered too, so nothing references bytes
     // the artifacts table has never heard of.
     for (const ref of refs.slice(1)) expect(repo.getArtifact(ref.hash)).not.toBeNull();

@@ -19,6 +19,11 @@ import {
  * seconds, the codec, and nothing else (the artifact-meta schema is deliberately
  * small; everything richer belongs in the track document).
  *
+ * `codec` always names what the artifact's **bytes** are. A segment is audio, so
+ * it carries the real codec (`pcm_s16le`, `mp3`); the track is the JSON document
+ * that describes the episode's audio, so it says `json` — the container, sample
+ * rate and voice of every clip are in the document itself, one read away.
+ *
  * `registerArtifact` is idempotent by hash, so the operator-supplied clip the
  * pipeline adopted and the blob the adapter wrote both register exactly once.
  */
@@ -44,6 +49,9 @@ export function codecOf(format: AudioFormat): string {
   return format === "wav" ? "pcm_s16le" : "mp3";
 }
 
+/** The track artifact is the JSON timing document, not playable audio. */
+export const TRACK_DOCUMENT_CODEC = "json";
+
 export function persistAudioTrack(deps: PersistAudioDeps, track: AudioTrack): PersistedAudioTrack {
   // Validate before writing: everything downstream trusts the CAS bytes.
   const valid = AudioTrackSchema.parse(track);
@@ -55,7 +63,7 @@ export function persistAudioTrack(deps: PersistAudioDeps, track: AudioTrack): Pe
     bytes: put.bytes,
     meta: {
       durationSec: valid.totals.spokenDurationSec,
-      codec: codecOf(valid.casting.format),
+      codec: TRACK_DOCUMENT_CODEC,
     },
   });
   return { hash: put.hash, bytes: put.bytes, created: put.created, artifact, segments };

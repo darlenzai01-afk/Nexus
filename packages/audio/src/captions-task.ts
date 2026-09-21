@@ -67,8 +67,10 @@ export function persistCaptionTrack(
     meta: {
       durationSec: valid.totals.captionDurationSec,
       // The artifact-meta schema is small by design: cue counts, settings and the
-      // per-cue lines all live in the document, which is one read away.
-      codec: "webvtt",
+      // per-cue lines all live in the document, which is one read away. `codec`
+      // names what the bytes *are*: this artifact is the caption document itself,
+      // so it says `json` — not `vtt`/`srt`, which nothing serialises yet (GAP-36).
+      codec: "json",
     },
   });
   return { hash: put.hash, bytes: put.bytes, created: put.created, artifact };
