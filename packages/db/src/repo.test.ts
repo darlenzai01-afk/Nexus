@@ -9,20 +9,106 @@ const SHA_B = "b".repeat(64);
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 const scriptDoc: ScriptDoc = {
-  version: 1,
+  version: 2,
   topic: "Why the sky is blue",
+  workingTitle: "Why the sky is blue",
   logline: "Rayleigh scattering, explained simply.",
   sections: [
     {
-      id: "sec-1",
-      title: "Intro",
-      claims: [{ id: "c1", text: "Sunlight contains all visible wavelengths." }],
+      id: "sec1",
+      role: "hook",
+      title: "Hook",
+      transition: "",
       sentences: [
-        { id: "s1", text: "Look up on a clear day." },
-        { id: "s2", text: "Sunlight contains all visible wavelengths.", claimRef: "c1" },
+        {
+          id: "s1_1",
+          narration: "Look up on a clear day.",
+          assertion: "context",
+          claimRefs: [],
+          sourceRefs: [],
+        },
+      ],
+    },
+    {
+      id: "sec2",
+      role: "introduction",
+      title: "Introduction",
+      transition: "Here is what is actually happening.",
+      sentences: [
+        {
+          id: "s2_1",
+          narration: "Sunlight contains all visible wavelengths.",
+          assertion: "fact",
+          claimRefs: ["c1"],
+          sourceRefs: [],
+        },
+      ],
+    },
+    {
+      id: "sec3",
+      role: "narrative",
+      title: "Scattering",
+      transition: "",
+      sentences: [
+        {
+          id: "s3_1",
+          narration: "Air scatters blue light more strongly.",
+          assertion: "context",
+          claimRefs: [],
+          sourceRefs: [],
+        },
+      ],
+    },
+    {
+      id: "sec4",
+      role: "conclusion",
+      title: "Conclusion",
+      transition: "",
+      sentences: [
+        {
+          id: "s4_1",
+          narration: "That is why the sky looks blue.",
+          assertion: "context",
+          claimRefs: [],
+          sourceRefs: [],
+        },
       ],
     },
   ],
+  claims: [
+    {
+      claimId: "c1",
+      statement: "Sunlight contains all visible wavelengths.",
+      status: "supported",
+      certainty: "established",
+      confidence: 0.8,
+      mayStateAsFact: true,
+      usage: "fact",
+      sentenceIds: ["s2_1"],
+      evidence: [
+        {
+          sourceId: "src_a",
+          url: "https://example.com/a",
+          excerpt: "Sunlight is white.",
+          locator: "0:18",
+        },
+      ],
+    },
+  ],
+  quality: { issues: [], repairRounds: 0, reviewRequired: false, droppedSentences: [] },
+  stats: { sections: 4, sentences: 4, words: 30, estimatedDurationSec: 12 },
+  provenance: {
+    engine: { name: "nexus-script", version: "1.0.0" },
+    researchPackageHash: SHA_A,
+    providers: { llm: "fake" },
+    steps: [],
+    aiSteps: ["write"],
+    deterministicSteps: ["select", "validate", "finalize"],
+    repairRounds: 0,
+    generatedAt: "2024-05-01T00:00:00.000Z",
+    durationMs: 0,
+  },
+  warnings: [],
 };
 
 describe("Repo — projects & episodes", () => {
@@ -232,15 +318,15 @@ describe("Repo — sources, artifacts, scripts, scenes, claims, media", () => {
     const scenes = repo.replaceScenes(script.id, [
       {
         kind: "title",
-        sectionId: "sec-1",
-        sentenceId: "s1",
+        sectionId: "sec1",
+        sentenceId: "s1_1",
         durationSec: 1.5,
         data: { title: "Intro" },
       },
       {
         kind: "fact",
-        sectionId: "sec-1",
-        sentenceId: "s2",
+        sectionId: "sec1",
+        sentenceId: "s2_1",
         startSec: 1.5,
         durationSec: 2,
         data: { body: "Blue." },
@@ -256,8 +342,8 @@ describe("Repo — sources, artifacts, scripts, scenes, claims, media", () => {
     const replanned = repo.replaceScenes(script.id, [
       {
         kind: "title",
-        sectionId: "sec-1",
-        sentenceId: "s1",
+        sectionId: "sec1",
+        sentenceId: "s1_1",
         durationSec: 1.5,
         data: { title: "Intro" },
       },
@@ -286,7 +372,7 @@ describe("Repo — sources, artifacts, scripts, scenes, claims, media", () => {
     const claims = repo.replaceClaims(script.id, [
       {
         claimRef: "c1",
-        sentenceId: "s2",
+        sentenceId: "s2_1",
         text: "Sunlight contains all visible wavelengths.",
         status: "supported",
         score: 1,
@@ -309,11 +395,11 @@ describe("Repo — sources, artifacts, scripts, scenes, claims, media", () => {
       repo.replaceClaims(script.id, [{ claimRef: "c2", sentenceId: "", text: "x" }]),
     ).toThrow(ValidationError);
     expect(() =>
-      repo.replaceClaims(script.id, [{ claimRef: "c2", sentenceId: "s1", text: "x", score: 2 }]),
+      repo.replaceClaims(script.id, [{ claimRef: "c2", sentenceId: "s1_1", text: "x", score: 2 }]),
     ).toThrow(ValidationError);
     expect(() =>
       repo.replaceClaims(script.id, [
-        { claimRef: "c2", sentenceId: "s1", text: "x", evidence: [{ sourceId: "missing" }] },
+        { claimRef: "c2", sentenceId: "s1_1", text: "x", evidence: [{ sourceId: "missing" }] },
       ]),
     ).toThrow(NotFoundError);
 

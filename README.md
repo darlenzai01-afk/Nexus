@@ -43,6 +43,10 @@ packages/
                     # package (questions, sources, verbatim evidence, factual
                     # claims, claim/source links, conflicts, verification status,
                     # provenance) plus the pipeline's `research` stage task
+  script/           # The script engine (Phase 6): verified research package →
+                    # structured narration script (hook, sections, transitions,
+                    # conclusion, visual cues) with a claim/evidence ledger, a
+                    # deterministic writing lint and the `script` stage task
 services/           # Intentionally empty — no microservices (AD-01); see its README
 infrastructure/     # Deployment assets (systemd/Docker/litestream) — added in later phases
 tests/              # Cross-package integration tests (unit tests live beside sources)
@@ -112,18 +116,19 @@ binds to `127.0.0.1` by default — no public surface.
 
 ## Roadmap (from the approved plan)
 
-| Plan phase | Scope                                                       | State                                                    |
-| ---------- | ----------------------------------------------------------- | -------------------------------------------------------- |
-| 0          | Monorepo, config, tooling, CI, app/worker entrypoints       | ✅ delivered                                             |
-| —          | **Session 2:** domain schemas + persistence foundation      | ✅ delivered (`docs/architecture/domain-model.md`)       |
-| —          | **Session 3:** persistent job orchestration foundation      | ✅ delivered (`docs/architecture/job-orchestration.md`)  |
-| —          | **Session 4:** provider abstraction layer (AD-06/12/13)     | ✅ delivered (`docs/architecture/provider-layer.md`)     |
-| —          | **Session 5:** research engine (topic → research package)   | ✅ delivered (`docs/architecture/research-engine.md`)    |
-| 1          | Hard loop: script → scene graph → voice → captions → render | next (blocked on OD-1 Remotion, OD-2 TTS)                |
-| 2          | Research + fact-check with claim/evidence traceability      | research engine ✅ delivered; `fact_check` stage pending |
-| 3          | Full long-form pipeline + media/license engine              | pending                                                  |
-| 4          | Shorts pipeline (9:16 re-render from scene graph)           | pending                                                  |
-| 5          | Publishing (upload kit first, YouTube API after audit)      | pending                                                  |
+| Plan phase | Scope                                                       | State                                                            |
+| ---------- | ----------------------------------------------------------- | ---------------------------------------------------------------- |
+| 0          | Monorepo, config, tooling, CI, app/worker entrypoints       | ✅ delivered                                                     |
+| —          | **Session 2:** domain schemas + persistence foundation      | ✅ delivered (`docs/architecture/domain-model.md`)               |
+| —          | **Session 3:** persistent job orchestration foundation      | ✅ delivered (`docs/architecture/job-orchestration.md`)          |
+| —          | **Session 4:** provider abstraction layer (AD-06/12/13)     | ✅ delivered (`docs/architecture/provider-layer.md`)             |
+| —          | **Session 5:** research engine (topic → research package)   | ✅ delivered (`docs/architecture/research-engine.md`)            |
+| —          | **Session 6:** script engine (research package → script)    | ✅ delivered (`docs/architecture/script-engine.md`)              |
+| 1          | Hard loop: script → scene graph → voice → captions → render | next (blocked on OD-1 Remotion, OD-2 TTS)                        |
+| 2          | Research + fact-check with claim/evidence traceability      | research engine ✅, script engine ✅; `fact_check` stage pending |
+| 3          | Full long-form pipeline + media/license engine              | pending                                                          |
+| 4          | Shorts pipeline (9:16 re-render from scene graph)           | pending                                                          |
+| 5          | Publishing (upload kit first, YouTube API after audit)      | pending                                                          |
 
 **Delivered so far on this branch:** (a) the provider layer — six capability
 interfaces with a registry, a quota-aware `invoke()` pipeline, deterministic
@@ -142,7 +147,15 @@ deduplicated sources and metadata, evidence whose every quotation is sliced out
 of the retrieved source, factual claims with claim/source relationships,
 preserved conflicts, deterministic verification status and full provenance
 (which step used AI, which was code) —
-[`docs/architecture/research-engine.md`](docs/architecture/research-engine.md).
+[`docs/architecture/research-engine.md`](docs/architecture/research-engine.md);
+and (e) the script engine — `research package → structured script`: working title,
+hook, introduction, narrative sections with spoken transitions, conclusion,
+narration, visual cues and a claim ledger that still resolves every factual
+sentence to the verbatim research evidence behind it, with the writing rules
+(cleared facts only, attribution for everything else, no invented quotation,
+source or suspense, no filler) enforced by deterministic validation and a gate
+that removes what cannot be fixed —
+[`docs/architecture/script-engine.md`](docs/architecture/script-engine.md).
 These sit before plan-Phase 1 because every later step depends on typed
 artifacts and crash-resumable, non-duplicating jobs.
 
@@ -157,6 +170,12 @@ configuration of its own: `NEXUS_LLM_PROVIDER=fake NEXUS_RESEARCH_PROVIDER=fake`
 runs the whole engine offline, and with no search provider configured the stage
 parks the job at `MANUAL_INPUT` so an operator can paste sources
 (`params.operatorSources`) instead of the engine inventing any.
+
+The script stage needs only the `llm` capability (the fakes write a schema-valid
+draft offline) and reads the package the earlier stage published. It parks the
+job at `MANUAL_INPUT` when the AI capability degrades, and also when research
+cleared nothing that may be asserted or reported — writing an opinion piece
+instead of a factual script is an operator's decision, not the engine's.
 
 Open decisions that block Phase 1 (Remotion licensing, TTS provider) are
 tracked in [`docs/plans/000-decisions.md`](docs/plans/000-decisions.md#open-decisions-must-be-resolved-at-the-named-gate);

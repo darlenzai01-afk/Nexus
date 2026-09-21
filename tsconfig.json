@@ -8,6 +8,7 @@
     { "path": "./packages/jobs" },
     { "path": "./packages/providers" },
     { "path": "./packages/research" },
+    { "path": "./packages/script" },
     { "path": "./apps/nexus" },
     { "path": "./tests" }
   ]

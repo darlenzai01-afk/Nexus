@@ -1,0 +1,26 @@
+{
+  "name": "@nexus/script",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Script generation: turns a verified research package into a structured narration script (working title, hook, introduction, narrative sections, transitions, conclusion, visual cues) where every factual sentence keeps its link to the research claims and evidence it came from.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean"
+  },
+  "dependencies": {
+    "@nexus/db": "workspace:*",
+    "@nexus/jobs": "workspace:*",
+    "@nexus/providers": "workspace:*",
+    "@nexus/research": "workspace:*",
+    "@nexus/storage": "workspace:*",
+    "zod": "^3.25.25"
+  }
+}
