@@ -22,6 +22,7 @@ export default defineConfig({
       "@nexus/characters": resolveFromRoot("./packages/characters/src/index.ts"),
       "@nexus/audio": resolveFromRoot("./packages/audio/src/index.ts"),
       "@nexus/render": resolveFromRoot("./packages/render/src/index.ts"),
+      "@nexus/video": resolveFromRoot("./packages/video/src/index.ts"),
     },
   },
   test: {

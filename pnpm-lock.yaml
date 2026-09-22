@@ -194,6 +194,40 @@ importers:
 
   packages/storage: {}
 
+  packages/video:
+    dependencies:
+      '@nexus/audio':
+        specifier: workspace:*
+        version: link:../audio
+      '@nexus/characters':
+        specifier: workspace:*
+        version: link:../characters
+      '@nexus/db':
+        specifier: workspace:*
+        version: link:../db
+      '@nexus/jobs':
+        specifier: workspace:*
+        version: link:../jobs
+      '@nexus/providers':
+        specifier: workspace:*
+        version: link:../providers
+      '@nexus/render':
+        specifier: workspace:*
+        version: link:../render
+      '@nexus/scenes':
+        specifier: workspace:*
+        version: link:../scenes
+      '@nexus/storage':
+        specifier: workspace:*
+        version: link:../storage
+      zod:
+        specifier: ^3.25.25
+        version: 3.25.76
+    devDependencies:
+      '@nexus/config':
+        specifier: workspace:*
+        version: link:../config
+
   tests:
     dependencies:
       '@nexus/app':

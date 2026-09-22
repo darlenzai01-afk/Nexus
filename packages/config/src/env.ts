@@ -48,6 +48,43 @@ export const envSchema = z.object({
   // survives an edited script, so only the scenes that changed are re-voiced.
   NEXUS_AUDIO_SEGMENT_CACHE: z.string().min(1).default("off"),
 
+  // ── Rendering (Phase 11) ───────────────────────────────────────────────
+  // The FFmpeg binary the render pipeline shells out to. Empty = look in the
+  // usual places, then PATH. This is the only external program the system runs.
+  NEXUS_FFMPEG_PATH: z.string().default(""),
+  // Output shape. The defaults are 1080p30; a render whose size disagrees with
+  // the scene plan's aspect ratio (or whose frame rate disagrees with its fps)
+  // is refused rather than stretched or re-timed.
+  NEXUS_RENDER_WIDTH: z.coerce.number().int().min(64).max(3840).default(1920),
+  NEXUS_RENDER_HEIGHT: z.coerce.number().int().min(64).max(2160).default(1080),
+  NEXUS_RENDER_FPS: z.coerce.number().int().min(1).max(60).default(30),
+  // Encoder settings, recorded in every render's metadata: a video is only
+  // reproducible if the settings that produced it are named.
+  NEXUS_RENDER_VIDEO_CODEC: z.string().min(1).default("libx264"),
+  NEXUS_RENDER_CRF: z.coerce.number().int().min(0).max(51).default(23),
+  NEXUS_RENDER_PRESET: z
+    .enum(["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower"])
+    .default("veryfast"),
+  NEXUS_RENDER_AUDIO_BITRATE: z
+    .string()
+    .regex(/^\d+k?$/u)
+    .default("128k"),
+  // Burn the caption track into the picture, or ship the video without captions.
+  NEXUS_RENDER_CAPTIONS: z.enum(["burn", "none"]).default("burn"),
+  // Font file for on-screen text and captions; empty = search the usual system
+  // paths. The font's sha256 travels into the metadata, so a video's text is
+  // traceable to the exact face that drew it.
+  NEXUS_RENDER_FONT: z.string().default(""),
+  // Frames per segment: the unit of resumption and reuse. Smaller costs a
+  // little more in encoder start-up and saves a lot when a run is killed.
+  NEXUS_RENDER_SEGMENT_FRAMES: z.coerce.number().int().min(1).max(3600).default(90),
+  // Encoder threads; 0 lets the encoder choose (and makes the encoded bytes
+  // machine-dependent, which the metadata then says out loud).
+  NEXUS_RENDER_THREADS: z.coerce.number().int().min(0).max(256).default(0),
+  // Where frames, segments and the assembled file live. Empty = under the data
+  // directory, so a render never writes inside the repository.
+  NEXUS_RENDER_WORK_DIR: z.string().default(""),
+
   // ── Provider policy (AD-06/AD-13) ──────────────────────────────────────
   // Per-call deadline. Every provider call is bounded; a hung free tier must
   // not stall a stage.
@@ -71,6 +108,14 @@ export const envSchema = z.object({
     .default("https://openrouter.ai/api/v1"),
   NEXUS_LLM_MODEL: z.string().min(1).default("meta-llama/llama-3.1-8b-instruct"),
 });
+
+/**
+ * The encoder presets FFmpeg's x264 accepts, and the only values the render
+ * configuration will take. Declared here so the app layer's type *is* the render
+ * layer's type: a render config built from `loadEnv().render` needs no widening.
+ */
+export type RenderPreset =
+  "ultrafast" | "superfast" | "veryfast" | "faster" | "fast" | "medium" | "slow" | "slower";
 
 /** The validated, normalized application configuration. */
 export interface AppConfig {
@@ -98,6 +143,24 @@ export interface AppConfig {
     readonly rate: number;
     /** `"off"`, or a path to the segment-cache index. */
     readonly segmentCache: string;
+  };
+  /** Render pipeline defaults: where FFmpeg is, and what a video is encoded as. */
+  readonly render: {
+    readonly ffmpegPath: string;
+    readonly width: number;
+    readonly height: number;
+    readonly fps: number;
+    readonly videoCodec: string;
+    readonly crf: number;
+    /** The x264 preset, restricted to the names FFmpeg accepts. */
+    readonly preset: RenderPreset;
+    readonly audioBitrate: string;
+    readonly captions: "burn" | "none";
+    /** Font file for on-screen text and captions; `""` = search system paths. */
+    readonly fontFile: string;
+    readonly segmentFrames: number;
+    readonly threads: number;
+    readonly workDir: string;
   };
   /** Provider call policy: deadlines, retries, caching, budget degradation. */
   readonly providerPolicy: {
@@ -183,6 +246,21 @@ export function loadEnv(options: LoadEnvOptions = {}): AppConfig {
       sampleRate: parsed.NEXUS_TTS_SAMPLE_RATE,
       rate: parsed.NEXUS_TTS_RATE,
       segmentCache: parsed.NEXUS_AUDIO_SEGMENT_CACHE,
+    },
+    render: {
+      ffmpegPath: parsed.NEXUS_FFMPEG_PATH,
+      width: parsed.NEXUS_RENDER_WIDTH,
+      height: parsed.NEXUS_RENDER_HEIGHT,
+      fps: parsed.NEXUS_RENDER_FPS,
+      videoCodec: parsed.NEXUS_RENDER_VIDEO_CODEC,
+      crf: parsed.NEXUS_RENDER_CRF,
+      preset: parsed.NEXUS_RENDER_PRESET,
+      audioBitrate: parsed.NEXUS_RENDER_AUDIO_BITRATE,
+      captions: parsed.NEXUS_RENDER_CAPTIONS,
+      fontFile: parsed.NEXUS_RENDER_FONT,
+      segmentFrames: parsed.NEXUS_RENDER_SEGMENT_FRAMES,
+      threads: parsed.NEXUS_RENDER_THREADS,
+      workDir: parsed.NEXUS_RENDER_WORK_DIR,
     },
     providerPolicy: {
       timeoutMs: parsed.NEXUS_PROVIDER_TIMEOUT_MS,

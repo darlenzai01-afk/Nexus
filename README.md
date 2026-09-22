@@ -78,6 +78,12 @@ packages/
                     # and the renderer read, the cue engine that *derives* captions
                     # from the narration and that timing (never embedded per scene),
                     # and the `voice` / `captions` stage tasks
+  video/            # The rendering pipeline (Phase 11): a browser-free, deterministic
+                    # rasteriser (TTF text, SVG layers, PNG) that draws exactly the frame
+                    # documents Phase 9 emits, and an FFmpeg pipeline that turns them into
+                    # one MP4 — resumable by segment, reusable by content key, with render
+                    # metadata, a render log and coded failure reports, plus the `render`
+                    # stage task, a demo tool and a real-binary smoke test
 services/           # Intentionally empty — no microservices (AD-01); see its README
 infrastructure/     # Deployment assets (systemd/Docker/litestream) — added in later phases
 tests/              # Cross-package integration tests (unit tests live beside sources)
@@ -231,7 +237,16 @@ captions and the renderer read —
 typed into a scene), wrapped to safe line lengths at word boundaries, held when
 they would flash by, split when they would sit too long and reported when they
 read too fast, published as a `captions` artifact with the `captions` stage task
-[`docs/architecture/audio-captions.md`](docs/architecture/audio-captions.md).
+; and
+(k) the rendering pipeline — `@nexus/video`: a scene manifest, the character assets,
+the animation events, the narration, the caption track and a validated render
+configuration become one real MP4 through a **deterministic in-process rasteriser**
+(the same frame documents Phase 9 writes as SVG, drawn with a TrueType parser and an
+anti-aliased canvas — no browser, no GPU, no downloads) and **FFmpeg**, with segments
+resumable after a kill, artifacts reusable by content key, a render key that pins
+config + plan + audio + captions + fonts, output verified by reading the file back,
+and failures reported as coded errors plus a `render_failure` report in the CAS —
+[`docs/architecture/video-rendering.md`](docs/architecture/video-rendering.md).
 These sit before plan-Phase 1 because every later step depends on typed
 artifacts and crash-resumable, non-duplicating jobs.
 
