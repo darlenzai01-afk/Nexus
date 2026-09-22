@@ -71,8 +71,12 @@ export function createRenderTask(deps: RenderTaskDeps): Task {
     stageKey: RENDER_STAGE_KEY,
 
     async execute(ctx: TaskContext): Promise<TaskResult> {
+      // The media stage (when it ran) publishes the manifest with resolved
+      // assets — the one the video should actually draw.
       const manifestHash =
-        upstreamHash(ctx, "plan", "manifestHash") ?? namedParam(ctx, "manifestHash");
+        upstreamHash(ctx, "source_media", "manifestHash") ??
+        upstreamHash(ctx, "plan", "manifestHash") ??
+        namedParam(ctx, "manifestHash");
       if (manifestHash === undefined) {
         throw new PermanentError(
           "render stage has no scene manifest: run the plan stage first, or pass params.manifestHash",

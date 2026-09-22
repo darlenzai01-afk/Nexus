@@ -8,7 +8,7 @@ import {
   type Repo,
 } from "@nexus/db";
 
-import { ConfigurationError, classifyError, errorMessage } from "./errors.js";
+import { ConfigurationError, PermanentError, classifyError, errorMessage } from "./errors.js";
 import { hashInputs, stageFingerprint } from "./fingerprint.js";
 import { assertEpisodeTransition, assertJobTransition, assertStepTransition } from "./machines.js";
 import { decideRetry, resolveRetryPolicy } from "./retry.js";
@@ -151,15 +151,22 @@ export async function runJob(deps: RunnerDeps, jobId: string): Promise<RunJobOut
         return parkForGate(deps, job, stage, fingerprint, gate, log);
       }
       assertStepTransition(current.state, "DONE");
+      // One output object for BOTH the checkpoint and the in-memory upstream:
+      // if the two ever diverge, the next pass recomputes a different
+      // downstream fingerprint and re-runs stages that did not change.
+      const output = {
+        gate,
+        decision: approval.decision,
+        fingerprint,
+        reviewedBy: approval.reviewed_by,
+        notes: approval.notes,
+      };
       repo.checkpointStep(job.id, stage.key, {
         inputHash: fingerprint,
-        output: {
-          gate,
-          decision: approval.decision,
-          fingerprint,
-          reviewedBy: approval.reviewed_by,
-          notes: approval.notes,
-        },
+        output,
+        // Artifacts the task declared when it parked (e.g. the review document
+        // a fact-check gates on) belong to the completed step, not to nobody.
+        artifacts: parseStepArtifacts(current.artifacts),
       });
       repo.logJob({
         jobId: job.id,
@@ -169,7 +176,7 @@ export async function runJob(deps: RunnerDeps, jobId: string): Promise<RunJobOut
         data: { decision: approval.decision, fingerprint },
       });
       setEpisodeState(deps, job, episode, stage.episodeStateOnComplete, log);
-      upstream[stage.key] = { gate, decision: approval.decision };
+      upstream[stage.key] = output;
       continue;
     }
 
@@ -241,6 +248,7 @@ export async function runJob(deps: RunnerDeps, jobId: string): Promise<RunJobOut
         result.waiting,
         log,
         result.waitingReason,
+        result.artifacts,
       );
     }
 
@@ -269,6 +277,12 @@ export async function runJob(deps: RunnerDeps, jobId: string): Promise<RunJobOut
   repo.logJob({ jobId: job.id, event: "job.completed", message: `${pipeline.label} finished` });
   log("job.completed", { pipeline: pipeline.id });
   return { status: "completed", jobId: job.id };
+}
+
+/** The step row stores artifacts as a JSON array string; parse it defensively. */
+function parseStepArtifacts(json: string): readonly ArtifactRef[] {
+  const parsed: unknown = JSON.parse(json);
+  return Array.isArray(parsed) ? (parsed as readonly ArtifactRef[]) : [];
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -417,10 +431,11 @@ function parkForGate(
   gate: string,
   log: (event: string, data?: Record<string, unknown>) => void,
   reason?: string,
+  artifacts?: readonly ArtifactRef[],
 ): RunJobOutcome {
   const step = deps.repo.requireStep(job.id, stage.key);
   assertStepTransition(step.state, "WAITING");
-  deps.repo.waitStep(job.id, stage.key, { gate, fingerprint });
+  deps.repo.waitStep(job.id, stage.key, { gate, fingerprint, ...(artifacts ? { artifacts } : {}) });
   assertJobTransition(job.state, "WAITING_GATE");
   deps.repo.setJobState(job.id, "WAITING_GATE", { gate });
   deps.repo.logJob({
@@ -458,7 +473,8 @@ function handleStageFailure(
   });
 
   assertStepTransition(step.state, "FAILED");
-  repo.failStep(job.id, stage.key, message);
+  const declared = error instanceof PermanentError ? error.artifacts : undefined;
+  repo.failStep(job.id, stage.key, message, declared);
   repo.logJob({
     jobId: job.id,
     stepKey: stage.key,

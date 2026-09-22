@@ -6,7 +6,7 @@ import { FileProviderCache, NullProviderCache, type ProviderCache } from "./cach
 import type { Clock } from "./clock.js";
 import { systemClock } from "./clock.js";
 import { ProviderConfigurationError } from "./errors.js";
-import { FakeLLMProvider } from "./fake/llm.js";
+import { FakeLLMProvider, type FakeLLMResponder } from "./fake/llm.js";
 import { FakeMediaProvider } from "./fake/media.js";
 import { FakePublishProvider } from "./fake/publishing.js";
 import { FakeResearchProvider } from "./fake/research.js";
@@ -85,6 +85,14 @@ export interface CreateProvidersOptions {
   readonly env?: EnvLike;
   /** Overrides on top of `config.providerPolicy` (tests use this most). */
   readonly policy?: Partial<ProviderPolicy>;
+  /**
+   * Answers for the `fake` LLM adapter. The default fake derives its output
+   * from the request schema alone, which can never quote real source content;
+   * a responder lets a caller (the offline dashboard demo, tests) make the
+   * whole chain coherent — e.g. quote exactly the text the fake search row
+   * carried, so evidence verifies and claims become writable.
+   */
+  readonly fakeLLMRespond?: FakeLLMResponder;
 }
 
 export interface Providers {
@@ -204,7 +212,7 @@ export function createProviders(options: CreateProvidersOptions): Providers {
     });
   };
 
-  registerBuiltins(registry);
+  registerBuiltins(registry, options.fakeLLMRespond);
 
   // One instance per resolved adapter: real clients keep their state, and a
   // degradation to `manual` (or a different variant) yields a different key,
@@ -270,7 +278,7 @@ function defaultSelection(config: AppConfig, kind: ProviderKind): string {
  * what makes "the capability layer is never a blocker" true rather than
  * aspirational. Real adapters are added per kind as their phase arrives.
  */
-function registerBuiltins(registry: ProviderRegistry): void {
+function registerBuiltins(registry: ProviderRegistry, fakeLLMRespond?: FakeLLMResponder): void {
   const { llm, tts } = { llm: "llm" as const, tts: "tts" as const };
   // A single shared memory store for the storage fake, so `put` then `read`
   // works within one container instance.
@@ -290,7 +298,8 @@ function registerBuiltins(registry: ProviderRegistry): void {
       kind: llm,
       mode: "fake",
       label: "Fake LLM (deterministic, offline)",
-      create: (runtime) => new FakeLLMProvider(runtime),
+      create: (runtime) =>
+        new FakeLLMProvider(runtime, fakeLLMRespond ? { respond: fakeLLMRespond } : {}),
     },
     {
       id: "manual",

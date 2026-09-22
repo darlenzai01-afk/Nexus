@@ -6,5 +6,45 @@
     "outDir": "dist"
   },
   "include": ["src"],
-  "references": [{ "path": "../../packages/config" }]
+  "references": [
+    {
+      "path": "../../packages/config"
+    },
+    {
+      "path": "../../packages/db"
+    },
+    {
+      "path": "../../packages/storage"
+    },
+    {
+      "path": "../../packages/jobs"
+    },
+    {
+      "path": "../../packages/providers"
+    },
+    {
+      "path": "../../packages/research"
+    },
+    {
+      "path": "../../packages/script"
+    },
+    {
+      "path": "../../packages/scenes"
+    },
+    {
+      "path": "../../packages/characters"
+    },
+    {
+      "path": "../../packages/audio"
+    },
+    {
+      "path": "../../packages/render"
+    },
+    {
+      "path": "../../packages/video"
+    },
+    {
+      "path": "../../packages/qa"
+    }
+  ]
 }

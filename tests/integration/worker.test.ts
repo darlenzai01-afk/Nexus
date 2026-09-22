@@ -1,43 +1,88 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
 import { loadEnv } from "@nexus/config";
-import { createWorker, type WorkerLogger } from "@nexus/app";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { migrate } from "@nexus/db";
+import { resolveGate } from "@nexus/jobs";
+import { DASHBOARD_STEPS, createPipelineWorker, openRuntime, type Runtime } from "@nexus/app";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 /**
- * Integration test for the worker entrypoint's lifecycle: start → heartbeats
- * → stop, using fake timers. Proves the second entrypoint of the
- * two-entrypoint deployment shape (AD-01) is real and controllable.
+ * Integration test for the worker entrypoint's wiring: the real task registry
+ * (domain engines + dashboard glue) claims and executes a job against a shared
+ * data directory, parks it at the pipeline's first human gate, and honours the
+ * gate decision — approve ends the run canceled-free, reject cancels it. The
+ * full happy path with scripted FFmpeg lives in apps/nexus/src/app.test.ts;
+ * here we prove the worker role composes and the gates bind, without needing a
+ * renderer at all.
  */
 describe("nexus worker (integration)", () => {
-  afterEach(() => {
-    vi.useRealTimers();
+  let dataDir: string;
+  let runtime: Runtime;
+  let drain: () => Promise<unknown>;
+
+  beforeAll(async () => {
+    dataDir = mkdtempSync(path.join(tmpdir(), "nexus-worker-"));
+    const config = loadEnv({
+      env: {
+        NEXUS_ENV: "test",
+        NEXUS_DATA_DIR: dataDir,
+        NEXUS_LOG_LEVEL: "silent",
+        NEXUS_LLM_PROVIDER: "fake",
+        NEXUS_RESEARCH_PROVIDER: "fake",
+        NEXUS_TTS_PROVIDER: "fake",
+      },
+    });
+    runtime = openRuntime(config);
+    migrate(runtime.db);
+    const worker = createPipelineWorker(config, { runtime, pollIntervalMs: 20 });
+    drain = () => worker.worker.drain();
   });
 
-  it("starts, emits heartbeats on schedule, and stops cleanly", () => {
-    vi.useFakeTimers();
+  afterAll(async () => {
+    runtime.db.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  });
 
-    const messages: string[] = [];
-    const logger: WorkerLogger = (message) => messages.push(message);
-    const config = loadEnv({ env: { NEXUS_ENV: "test", NEXUS_WORKER_HEARTBEAT_MS: "1000" } });
-    const worker = createWorker(config, { logger });
+  it("runs a real pipeline to its first human gate, then honours the decision", async () => {
+    const { repo } = runtime;
+    const project = repo.createProject({ name: "Integration", slug: "integration" });
+    const episode = repo.createEpisode({ projectId: project.id, topic: "Why canal locks hold" });
+    const { job } = repo.createJob({
+      episodeId: episode.id,
+      pipeline: "longform_v1",
+      steps: DASHBOARD_STEPS,
+    });
 
-    expect(worker.running).toBe(false);
+    // The worker walks the live stages until something needs a human.
+    for (let round = 0; round < 120; round += 1) {
+      const state = repo.requireJob(job.id).state;
+      if (
+        state === "WAITING_GATE" ||
+        state === "DONE" ||
+        state === "FAILED" ||
+        state === "CANCELED"
+      )
+        break;
+      await drain();
+    }
+    const parked = repo.requireJob(job.id);
+    expect(parked.state).toBe("WAITING_GATE");
+    expect(parked.waiting_gate).toBe("FACT_REVIEW");
 
-    worker.start();
-    expect(worker.running).toBe(true);
-    expect(messages).toEqual(["worker started"]);
+    // The research stage really ran: the episode has a research package.
+    const researchStep = repo.listJobSteps(job.id).find((step) => step.step_key === "research");
+    expect(researchStep?.state).toBe("DONE");
 
-    vi.advanceTimersByTime(3000);
-    expect(messages.filter((m) => m === "worker heartbeat")).toHaveLength(3);
-
-    worker.stop();
-    expect(worker.running).toBe(false);
-
-    vi.advanceTimersByTime(5000);
-    expect(messages.filter((m) => m === "worker heartbeat")).toHaveLength(3);
-    expect(messages.at(-1)).toBe("worker stopped");
-
-    // Idempotent lifecycle guards.
-    worker.stop();
-    expect(messages.filter((m) => m === "worker stopped")).toHaveLength(1);
+    // A rejection at the gate cancels the run and flags the episode.
+    resolveGate(repo, job.id, {
+      decision: "rejected",
+      reviewedBy: "integration-test",
+      notes: "the fake sources are not usable",
+    });
+    const canceled = repo.requireJob(job.id);
+    expect(canceled.state).toBe("CANCELED");
+    expect(repo.requireEpisode(episode.id).state).toBe("NEEDS_CHANGES");
   });
 });

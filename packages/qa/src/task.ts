@@ -56,8 +56,12 @@ export function createQATask(deps: QATaskDeps): Task {
     stageKey: QA_STAGE_KEY,
 
     async execute(ctx: TaskContext): Promise<{ output: unknown; artifacts: ArtifactRef[] }> {
+      // What QA audits is what the render drew: the media-resolved manifest
+      // when the media stage produced one, else the plan's own.
       const manifestHash =
-        upstreamHash(ctx, "plan", "manifestHash") ?? namedParam(ctx, "manifestHash");
+        upstreamHash(ctx, "source_media", "manifestHash") ??
+        upstreamHash(ctx, "plan", "manifestHash") ??
+        namedParam(ctx, "manifestHash");
       if (manifestHash === undefined) {
         throw new PermanentError(
           "qa stage has no scene plan: run the plan stage first, or pass params.manifestHash",
@@ -137,10 +141,21 @@ export function createQATask(deps: QATaskDeps): Task {
       }
 
       if (!report.publishable) {
-        // The report is stored first: a blocked episode must leave its evidence.
+        // The report is stored first: a blocked episode must leave its evidence
+        // — attached to the failure, so the step itself carries it.
         throw new PermanentError(
           `${describeReport(report)} — publication blocked by ` +
             `${report.blocking.join(", ") || "unpublished findings"} (report ${persisted.hash})`,
+          {
+            artifacts: [
+              { hash: persisted.hash, kind: QA_ARTIFACT_KIND, role: QA_ARTIFACT_ROLE },
+              {
+                hash: persisted.summaryHash,
+                kind: QA_SUMMARY_ARTIFACT_KIND,
+                role: QA_SUMMARY_ARTIFACT_ROLE,
+              },
+            ],
+          },
         );
       }
 

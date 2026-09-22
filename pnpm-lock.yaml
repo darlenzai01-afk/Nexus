@@ -38,9 +38,42 @@ importers:
 
   apps/nexus:
     dependencies:
+      '@nexus/audio':
+        specifier: workspace:*
+        version: link:../../packages/audio
+      '@nexus/characters':
+        specifier: workspace:*
+        version: link:../../packages/characters
       '@nexus/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@nexus/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@nexus/jobs':
+        specifier: workspace:*
+        version: link:../../packages/jobs
+      '@nexus/providers':
+        specifier: workspace:*
+        version: link:../../packages/providers
+      '@nexus/qa':
+        specifier: workspace:*
+        version: link:../../packages/qa
+      '@nexus/research':
+        specifier: workspace:*
+        version: link:../../packages/research
+      '@nexus/scenes':
+        specifier: workspace:*
+        version: link:../../packages/scenes
+      '@nexus/script':
+        specifier: workspace:*
+        version: link:../../packages/script
+      '@nexus/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
+      '@nexus/video':
+        specifier: workspace:*
+        version: link:../../packages/video
       fastify:
         specifier: ^5.0.0
         version: 5.12.5

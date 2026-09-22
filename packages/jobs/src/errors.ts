@@ -1,4 +1,5 @@
 import type { ErrorKind } from "@nexus/db";
+import type { ArtifactRef } from "@nexus/db";
 
 /**
  * Error taxonomy for stages. The distinction is the operator's, not the
@@ -16,9 +17,16 @@ export class RetryableError extends Error {
 }
 
 export class PermanentError extends Error {
-  constructor(message: string, options: { cause?: unknown } = {}) {
+  /** Artifacts the stage registered before failing (e.g. a QA report that blocks). */
+  readonly artifacts?: readonly ArtifactRef[];
+
+  constructor(
+    message: string,
+    options: { cause?: unknown; artifacts?: readonly ArtifactRef[] } = {},
+  ) {
     super(message, options);
     this.name = "PermanentError";
+    if (options.artifacts !== undefined) this.artifacts = options.artifacts;
   }
 }
 

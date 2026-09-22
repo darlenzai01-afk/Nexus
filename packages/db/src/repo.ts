@@ -979,23 +979,34 @@ export class Repo {
   /**
    * Park a stage at a human/external gate. The fingerprint of the content
    * being gated is stored *before* parking, so an approval can be bound to
-   * exactly the version the operator saw (AD-08).
+   * exactly the version the operator saw (AD-08). A task may declare the
+   * artifacts the stage has already produced (e.g. the review document a
+   * fact-check parks with); they are kept on the step so the gate's eventual
+   * completion carries them and declared outputs stay non-empty.
    */
   waitStep(
     jobId: string,
     stepKey: string,
-    input: { gate: string; fingerprint: string },
+    input: { gate: string; fingerprint: string; artifacts?: readonly ArtifactRef[] },
   ): JobStepRow {
     this.requireJob(jobId);
     const step = this.getJobStep(jobId, stepKey);
     if (!step) throw new NotFoundError("job step", `${jobId}/${stepKey}`);
     if (!input.gate.trim()) throw new ValidationError("Invalid gate: name is required");
     const fingerprint = validate(Sha256Schema, input.fingerprint, "gate fingerprint");
+    const artifacts = validate(ArtifactRefListSchema, input.artifacts ?? [], "step artifacts");
+    for (const artifact of artifacts) {
+      if (!this.getArtifact(artifact.hash)) {
+        throw new ValidationError(
+          `Invalid step ${jobId}/${stepKey}: artifact ${artifact.hash} is not registered in artifacts — register it before parking`,
+        );
+      }
+    }
     this.db.run(
       `UPDATE pipeline_job_steps
-          SET state = 'WAITING', input_hash = ?, started_at = COALESCE(started_at, ?), error = NULL
+          SET state = 'WAITING', input_hash = ?, artifacts = ?, started_at = COALESCE(started_at, ?), error = NULL
         WHERE job_id = ? AND step_key = ?;`,
-      [fingerprint, nowIso(), jobId, stepKey],
+      [fingerprint, JSON.stringify(artifacts), nowIso(), jobId, stepKey],
     );
     return this.getJobStep(jobId, stepKey)!;
   }
@@ -1117,13 +1128,26 @@ export class Repo {
     );
   }
 
-  failStep(jobId: string, stepKey: string, error: string): JobStepRow {
+  failStep(
+    jobId: string,
+    stepKey: string,
+    error: string,
+    artifacts?: readonly ArtifactRef[],
+  ): JobStepRow {
     this.requireJob(jobId);
     if (!this.getJobStep(jobId, stepKey))
       throw new NotFoundError("job step", `${jobId}/${stepKey}`);
+    const refs = validate(ArtifactRefListSchema, artifacts ?? [], "step artifacts");
+    for (const artifact of refs) {
+      if (!this.getArtifact(artifact.hash)) {
+        throw new ValidationError(
+          `Invalid step ${jobId}/${stepKey}: artifact ${artifact.hash} is not registered in artifacts — register it before failing`,
+        );
+      }
+    }
     this.db.run(
-      "UPDATE pipeline_job_steps SET state = 'FAILED', error = ?, finished_at = ? WHERE job_id = ? AND step_key = ?;",
-      [error, nowIso(), jobId, stepKey],
+      "UPDATE pipeline_job_steps SET state = 'FAILED', error = ?, artifacts = COALESCE(NULLIF(artifacts, '[]'), ?), finished_at = ? WHERE job_id = ? AND step_key = ?;",
+      [error, JSON.stringify(refs), nowIso(), jobId, stepKey],
     );
     return this.getJobStep(jobId, stepKey)!;
   }

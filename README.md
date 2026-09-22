@@ -31,7 +31,12 @@ a fingerprinted human approval (AD-08).
 
 ```
 apps/
-  nexus/            # The single application: `app` + `worker` entrypoints (Fastify)
+  nexus/            # The single application (AD-01): the operator dashboard and
+                    # the pipeline worker over one runtime (SQLite + CAS + a
+                    # provider container). Server-rendered HTML (create/start/
+                    # inspect/approve/reject/retry — Phase 13), a 12-stage task
+                    # registry, and the app's glue stages (idea, fact_check gate,
+                    # source_media, animate, approval) in `src/pipeline.ts`
 packages/
   config/           # Shared, schema-validated environment configuration (zod)
   db/               # SQLite system of record: versioned migrations, typed domain
@@ -171,6 +176,7 @@ binds to `127.0.0.1` by default — no public surface.
 | —          | **Session 10:** voice + caption/timing architecture              | ✅ delivered (`docs/architecture/audio-captions.md`)                                                        |
 | —          | **Session 11:** cloud-compatible rendering pipeline              | ✅ delivered (`docs/architecture/video-rendering.md`)                                                       |
 | —          | **Session 12:** automated QA engine (blocks publication)         | ✅ delivered (`docs/architecture/qa-engine.md`)                                                             |
+| —          | **Session 13:** minimal functional operator dashboard            | ✅ delivered (`docs/architecture/dashboard.md`)                                                             |
 | 1          | Hard loop: script → scene graph → voice → captions → render → QA | scene graph ✅, voice ✅, captions ✅, render ✅, QA ✅; `approval`/`publish` stages pending (plan-Phase 5) |
 | 2          | Research + fact-check with claim/evidence traceability           | research ✅, script ✅, scenes ✅; `fact_check` stage pending                                               |
 | 3          | Full long-form pipeline + media/license engine                   | pending                                                                                                     |
@@ -265,7 +271,14 @@ into one structured, versioned report whose `publishable` flag is computed, neve
 authored, and enforced three ways (`assertPublishable`, the `qa` stage failing the
 job, reuse validation refusing blocked reports) so an episode that fails QA cannot
 reach approval or publishing —
-[`docs/architecture/qa-engine.md`](docs/architecture/qa-engine.md).
+[`docs/architecture/qa-engine.md`](docs/architecture/qa-engine.md);
+and (m) the operator dashboard — the single `apps/nexus` application with two
+entrypoints (dashboard host + pipeline worker) over one runtime, the 12-stage
+dashboard pipeline (longform minus publishing) with its glue stages and the
+enforced `FACT_REVIEW`/`FINAL_APPROVAL` gates, server-rendered pages to create,
+start, watch, inspect (research, sources, script, scenes, artifacts, QA) and
+decide (approve, reject, rewind, retry) —
+[`docs/architecture/dashboard.md`](docs/architecture/dashboard.md).
 These sit before plan-Phase 1 because every later step depends on typed
 artifacts and crash-resumable, non-duplicating jobs.
 

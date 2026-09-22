@@ -109,7 +109,14 @@ export const LONG_FORM_PIPELINE: PipelineDef = {
       completeLabel: "MEDIA_COMPLETE",
       episodeStateOnStart: "MEDIA_GATHERING",
       episodeStateOnComplete: "VOICE_SYNTHESIS",
-      produces: ["image", "video", "document"],
+      // The resolution report is the stage's declared deliverable; the
+      // media-resolved manifest it publishes is already declared by `plan`
+      // (kind `scene_graph`). Placeholder *plates* are drawn procedurally by
+      // the renderer, so no image bytes exist to register, and sourced
+      // image/video assets arrive with the real media engine (plan-Phase 3) —
+      // declaring them now would make every episode fail QA for artifacts
+      // nothing can produce yet.
+      produces: ["document"],
     }),
     stage({
       key: "voice",
@@ -136,7 +143,11 @@ export const LONG_FORM_PIPELINE: PipelineDef = {
       completeLabel: "ANIMATION_COMPLETE",
       episodeStateOnStart: "COMPOSITING",
       episodeStateOnComplete: "RENDERING",
-      produces: ["scene_graph", "image"],
+      // The animation timeline is not a separate artifact in the shipped
+      // architecture: the render pipeline folds the manifest's events
+      // deterministically (Phase 9 fold inside `renderVideo`), so this stage
+      // hands the media-resolved manifest forward. It produces no images.
+      produces: ["scene_graph"],
     }),
     stage({
       key: "render",

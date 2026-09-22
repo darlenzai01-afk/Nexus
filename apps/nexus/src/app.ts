@@ -1,5 +1,28 @@
 import type { AppConfig } from "@nexus/config";
+import { NotFoundError, Repo, ValidationError } from "@nexus/db";
+import type { ArtifactRow, EpisodeRow } from "@nexus/db";
+import { getJobStatus, resolveGate, retryFailedJob, type JobStatusView } from "@nexus/jobs";
+import { loadQAReport } from "@nexus/qa";
+import { loadResearchPackage } from "@nexus/research";
+import { loadSceneManifest } from "@nexus/scenes";
+import { loadScriptDoc } from "@nexus/script";
+import type { BlobStore } from "@nexus/storage";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
+
+import { DASHBOARD_PIPELINE, DASHBOARD_STEPS } from "./pipeline.js";
+import {
+  artifactsPage,
+  episodePage,
+  errorPage,
+  homePage,
+  qaPage,
+  researchPage,
+  scenesPage,
+  scriptPage,
+  sourcesPage,
+  type ArtifactRowView,
+  contentTypeOf,
+} from "./views.js";
 
 /** Kept in sync with apps/nexus/package.json version by hand for now (0.0.0 = foundation phase). */
 export const SERVICE_VERSION = "0.0.0";
@@ -9,27 +32,165 @@ export interface BuildAppOptions {
   readonly logger?: FastifyServerOptions["logger"];
 }
 
+/**
+ * What the routes need. The composition root opens the durable things once
+ * (runtime.ts); the app never opens a socket to reach them.
+ */
+export interface AppDeps {
+  readonly repo: Repo;
+  readonly storage: BlobStore;
+  /** Injected clock (tests fix time); the machine clock by default. */
+  readonly now?: () => Date;
+}
+
 export interface HealthResponse {
   readonly status: "ok";
   readonly service: "nexus";
   readonly role: "app";
   readonly env: AppConfig["env"];
   readonly version: string;
+  readonly episodes: number;
+}
+
+const HEX64 = /^[0-9a-f]{64}$/u;
+const FORM = "application/x-www-form-urlencoded";
+
+function form(body: unknown): URLSearchParams {
+  return body instanceof URLSearchParams ? body : new URLSearchParams();
+}
+
+function field(body: unknown, name: string): string {
+  return form(body).get(name)?.trim() ?? "";
+}
+
+/** The step outputs of an episode's latest job, keyed by stage. */
+function latestJob(repo: Repo, episodeId: string): JobStatusView | undefined {
+  const jobs = repo.listJobs(episodeId);
+  const job = jobs.at(-1);
+  return job === undefined ? undefined : getJobStatus(repo, job.id, { logLimit: 60 });
+}
+
+function stepOutput(repo: Repo, jobId: string, stage: string): Record<string, unknown> {
+  const step = repo.getJobStep(jobId, stage);
+  if (step === undefined || step.output === null) return {};
+  try {
+    const parsed: unknown = JSON.parse(step.output);
+    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function hashOf(output: Record<string, unknown>, key: string): string | null {
+  const value = output[key];
+  return typeof value === "string" && HEX64.test(value) ? value : null;
+}
+
+/** An episode's key artifact hashes, resolved from the latest job's steps. */
+function episodeHashes(
+  repo: Repo,
+  episodeId: string,
+): {
+  job: JobStatusView | undefined;
+  researchPackage: string | null;
+  script: string | null;
+  manifest: string | null;
+  qa: string | null;
+  video: string | null;
+  thumbnail: string | null;
+} {
+  const job = latestJob(repo, episodeId);
+  if (job === undefined) {
+    return {
+      job,
+      researchPackage: null,
+      script: null,
+      manifest: null,
+      qa: null,
+      video: null,
+      thumbnail: null,
+    };
+  }
+  const research = stepOutput(repo, job.id, "research");
+  const script = stepOutput(repo, job.id, "script");
+  const plan = stepOutput(repo, job.id, "plan");
+  const media = stepOutput(repo, job.id, "source_media");
+  const qa = stepOutput(repo, job.id, "qa");
+  const videoArtifact = job.steps
+    .find((step) => step.key === "render")
+    ?.artifacts.find((artifact) => artifact.kind === "video");
+  const thumbnailArtifact = job.steps
+    .find((step) => step.key === "render")
+    ?.artifacts.find((artifact) => artifact.kind === "thumbnail");
+  // A blocked QA run fails the step, so its output is empty — but the report
+  // itself is attached to the failed step as evidence. Show it.
+  const qaReportArtifact = job.steps
+    .find((step) => step.key === "qa")
+    ?.artifacts.find((artifact) => artifact.kind === "qa_report");
+  return {
+    job,
+    researchPackage: hashOf(research, "packageHash"),
+    script: hashOf(script, "docHash"),
+    manifest: hashOf(media, "manifestHash") ?? hashOf(plan, "manifestHash"),
+    qa: hashOf(qa, "reportHash") ?? qaReportArtifact?.hash ?? null,
+    video: videoArtifact?.hash ?? null,
+    thumbnail: thumbnailArtifact?.hash ?? null,
+  };
 }
 
 /**
- * Build the Fastify application (routes only — no listening).
+ * Build the dashboard application (routes only — no listening).
  *
- * Foundation phase scope (docs/plans/000-architecture-discovery.md §20,
- * Phase 0/1): a health endpoint and a service info endpoint. The dashboard,
- * orchestrator API, and pipeline routes arrive in later phases.
+ * Server-rendered HTML over the orchestration read models: the dashboard is a
+ * thin, reliable surface on the DB and the CAS — no client framework, no
+ * client-side fetching, every action a form POST that redirects. The pipeline
+ * itself runs in the worker process; the app only creates jobs and records
+ * gate decisions, so a slow render never blocks a page.
  */
 export async function buildApp(
   config: AppConfig,
+  deps: AppDeps,
   options: BuildAppOptions = {},
 ): Promise<FastifyInstance> {
   const app = Fastify({ logger: options.logger ?? false });
 
+  // Plain HTML forms post urlencoded bodies; Fastify's default parser only
+  // knows JSON. One small parser, no plugin dependency.
+  app.addContentTypeParser(FORM, { parseAs: "string" }, (_request, body, done) => {
+    done(null, new URLSearchParams(String(body)));
+  });
+
+  app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
+    if (error instanceof NotFoundError || error.statusCode === 404) {
+      void reply.status(404).type("text/html").send(errorPage(404, "That page does not exist."));
+      return;
+    }
+    const message =
+      error instanceof ValidationError || error instanceof Error
+        ? error.message
+        : "unexpected error";
+    request.log.error({ err: message }, "request failed");
+    void reply
+      .status(error.statusCode !== undefined && error.statusCode >= 400 ? error.statusCode : 500)
+      .type("text/html")
+      .send(errorPage(500, message.slice(0, 500)));
+  });
+
+  const redirectToEpisode = (
+    reply: { redirect: (url: string, code: number) => unknown },
+    episodeId: string,
+    flashes: { error?: string; notice?: string },
+  ): void => {
+    const params = new URLSearchParams();
+    if (flashes.error !== undefined && flashes.error !== "")
+      params.set("error", flashes.error.slice(0, 400));
+    if (flashes.notice !== undefined && flashes.notice !== "")
+      params.set("notice", flashes.notice.slice(0, 300));
+    const query = params.toString();
+    void reply.redirect(`/episodes/${episodeId}${query === "" ? "" : `?${query}`}`, 303);
+  };
+
+  // ── health ───────────────────────────────────────────────────────────────
   app.get("/healthz", async (): Promise<HealthResponse> => {
     return {
       status: "ok",
@@ -37,18 +198,370 @@ export async function buildApp(
       role: "app",
       env: config.env,
       version: SERVICE_VERSION,
+      episodes: deps.repo.listEpisodes().length,
     };
   });
 
-  app.get("/", async () => {
-    return {
-      name: "Nexus Forge",
-      phase: "foundation",
-      role: "app",
-      endpoints: ["/healthz"],
-      docs: "docs/plans/000-architecture-discovery.md",
-    };
+  // ── home ─────────────────────────────────────────────────────────────────
+  app.get("/", async (request, reply) => {
+    const query = request.query as { error?: string; notice?: string };
+    const episodes = [...deps.repo.listEpisodes()].reverse();
+    void reply.type("text/html").send(
+      homePage({
+        projects: deps.repo
+          .listProjects()
+          .map((project) => ({ id: project.id, name: project.name, slug: project.slug })),
+        episodes: episodes.map((episode) => {
+          const jobs = deps.repo.listJobs(episode.id);
+          const job = jobs.at(-1);
+          return {
+            episode,
+            job: job === undefined ? undefined : getJobStatus(deps.repo, job.id, { logLimit: 0 }),
+          };
+        }),
+        flashes: { error: query.error, notice: query.notice },
+      }),
+    );
+  });
+
+  // ── create project / episode ─────────────────────────────────────────────
+  app.post("/projects", async (request, reply) => {
+    try {
+      const name = field(request.body, "name");
+      const slug = field(request.body, "slug");
+      const project = deps.repo.createProject({
+        name,
+        slug,
+        description: "created from the dashboard",
+      });
+      void reply.redirect(`/?notice=project+${encodeURIComponent(project.name)}+created`, 303);
+    } catch (error) {
+      void reply.redirect(`/?error=${encodeURIComponent(errorMessage(error))}`, 303);
+    }
+  });
+
+  app.post("/episodes", async (request, reply) => {
+    try {
+      const topic = field(request.body, "topic");
+      const outline = field(request.body, "outline")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line !== "");
+      const projectId = field(request.body, "projectId");
+
+      let project = projectId === "" ? undefined : deps.repo.getProject(projectId);
+      if (project === undefined) {
+        // First run: one project is provisioned automatically; every later
+        // episode can join it (or a new one via the Projects form).
+        const existing = deps.repo.listProjects()[0];
+        project = existing ?? deps.repo.createProject({ name: "My channel", slug: "my-channel" });
+      }
+      const episode = deps.repo.createEpisode({
+        projectId: project.id,
+        topic,
+        ...(outline.length > 0 ? { outline } : {}),
+        kind: "long",
+      });
+      void reply.redirect(`/episodes/${episode.id}?notice=episode+created`, 303);
+    } catch (error) {
+      void reply.redirect(`/?error=${encodeURIComponent(errorMessage(error))}`, 303);
+    }
+  });
+
+  // ── start the pipeline ───────────────────────────────────────────────────
+  app.post("/episodes/:id/start", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const episode = deps.repo.requireEpisode(id);
+      const existing = deps.repo.listJobs(episode.id);
+      const active = existing.find((job) =>
+        ["PENDING", "RUNNING", "WAITING_GATE"].includes(job.state),
+      );
+      if (active !== undefined) {
+        redirectToEpisode(reply, id, {
+          error: `a run is already ${active.state.toLowerCase()} — resolve it first`,
+        });
+        return;
+      }
+      const job = deps.repo.createJob({
+        episodeId: episode.id,
+        pipeline: DASHBOARD_PIPELINE.id,
+        steps: DASHBOARD_STEPS,
+        // One key per run: a re-run of a canceled episode is a *new* job, and
+        // stage fingerprints (not this key) are what make its stages reusable.
+        idempotencyKey: `dash:${episode.id}:${existing.length + 1}`,
+        maxAttempts: 3,
+      });
+      void redirectToEpisode(reply, id, {
+        notice: `pipeline started (job ${job.job.id.slice(0, 8)}…) — the worker picks it up within a second`,
+      });
+    } catch (error) {
+      void redirectToEpisode(reply, id, { error: errorMessage(error) });
+    }
+  });
+
+  // ── gate decisions + retry ───────────────────────────────────────────────
+  app.post("/jobs/:id/approve", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const job = deps.repo.requireJob(id);
+      const notes = field(request.body, "notes");
+      const result = resolveGate(deps.repo, id, {
+        decision: "approved",
+        reviewedBy: "dashboard",
+        ...(notes !== "" ? { notes } : {}),
+      });
+      void redirectToEpisode(reply, job.episode_id, {
+        notice: `${result.gate} approved — the run continues`,
+      });
+    } catch (error) {
+      const job = deps.repo.getJob(id);
+      void redirectToEpisode(reply, job?.episode_id ?? "", { error: errorMessage(error) });
+    }
+  });
+
+  app.post("/jobs/:id/reject", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const job = deps.repo.requireJob(id);
+      const notes = field(request.body, "notes");
+      resolveGate(deps.repo, id, {
+        decision: "rejected",
+        reviewedBy: "dashboard",
+        ...(notes !== "" ? { notes } : {}),
+      });
+      void redirectToEpisode(reply, job.episode_id, {
+        notice: "episode rejected and canceled — its state is NEEDS_CHANGES",
+      });
+    } catch (error) {
+      const job = deps.repo.getJob(id);
+      void redirectToEpisode(reply, job?.episode_id ?? "", { error: errorMessage(error) });
+    }
+  });
+
+  app.post("/jobs/:id/changes", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const job = deps.repo.requireJob(id);
+      const targetStage = field(request.body, "targetStage");
+      const notes = field(request.body, "notes");
+      const result = resolveGate(deps.repo, id, {
+        decision: "needs_changes",
+        targetStage,
+        reviewedBy: "dashboard",
+        ...(notes !== "" ? { notes } : {}),
+      });
+      void redirectToEpisode(reply, job.episode_id, {
+        notice: `rewound to ${result.invalidatedStages.length} stage(s) from ${targetStage} — the run re-executes them`,
+      });
+    } catch (error) {
+      const job = deps.repo.getJob(id);
+      void redirectToEpisode(reply, job?.episode_id ?? "", { error: errorMessage(error) });
+    }
+  });
+
+  app.post("/jobs/:id/retry", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const job = deps.repo.requireJob(id);
+      retryFailedJob(deps.repo, id);
+      void redirectToEpisode(reply, job.episode_id, {
+        notice: "run requeued — the worker retries the failed stage (completed stages are reused)",
+      });
+    } catch (error) {
+      const job = deps.repo.getJob(id);
+      void redirectToEpisode(reply, job?.episode_id ?? "", { error: errorMessage(error) });
+    }
+  });
+
+  // ── episode pages ────────────────────────────────────────────────────────
+  const requireEpisode = (id: string): EpisodeRow => deps.repo.requireEpisode(id);
+
+  const enabled = (hashes: {
+    job: JobStatusView | undefined;
+    researchPackage: string | null;
+    script: string | null;
+    manifest: string | null;
+    qa: string | null;
+  }): Record<string, boolean> => ({
+    research: hashes.researchPackage !== null,
+    sources: hashes.researchPackage !== null,
+    script: hashes.script !== null,
+    scenes: hashes.manifest !== null,
+    artifacts:
+      hashes.job !== undefined && hashes.job.steps.some((step) => step.artifacts.length > 0),
+    qa: hashes.qa !== null,
+  });
+
+  app.get("/episodes/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const episode = requireEpisode(id);
+    const query = request.query as { error?: string; notice?: string };
+    const hashes = episodeHashes(deps.repo, id);
+    const qaVerdict = (() => {
+      if (hashes.qa === null) return null;
+      try {
+        return loadQAReport(deps.storage, hashes.qa).verdict;
+      } catch {
+        return null;
+      }
+    })();
+    void reply.type("text/html").send(
+      episodePage({
+        episode,
+        job: hashes.job,
+        project: deps.repo.getProject(episode.project_id),
+        artifactPages: enabled(hashes),
+        flashes: { error: query.error, notice: query.notice },
+        qaVerdict,
+      }),
+    );
+  });
+
+  app.get("/episodes/:id/research", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const episode = requireEpisode(id);
+    const hashes = episodeHashes(deps.repo, id);
+    if (hashes.researchPackage === null) {
+      void reply
+        .status(404)
+        .type("text/html")
+        .send(errorPage(404, "The research stage has not produced a package yet."));
+      return;
+    }
+    void reply
+      .type("text/html")
+      .send(
+        researchPage(
+          episode,
+          loadResearchPackage(deps.storage, hashes.researchPackage),
+          enabled(hashes),
+          hashes.researchPackage,
+        ),
+      );
+  });
+
+  app.get("/episodes/:id/sources", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const episode = requireEpisode(id);
+    const hashes = episodeHashes(deps.repo, id);
+    if (hashes.researchPackage === null) {
+      void reply
+        .status(404)
+        .type("text/html")
+        .send(errorPage(404, "The research stage has not produced a package yet."));
+      return;
+    }
+    void reply
+      .type("text/html")
+      .send(
+        sourcesPage(
+          episode,
+          loadResearchPackage(deps.storage, hashes.researchPackage),
+          enabled(hashes),
+        ),
+      );
+  });
+
+  app.get("/episodes/:id/script", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const episode = requireEpisode(id);
+    const hashes = episodeHashes(deps.repo, id);
+    if (hashes.script === null) {
+      void reply
+        .status(404)
+        .type("text/html")
+        .send(errorPage(404, "The script stage has not produced a script yet."));
+      return;
+    }
+    void reply
+      .type("text/html")
+      .send(scriptPage(episode, loadScriptDoc(deps.storage, hashes.script), enabled(hashes)));
+  });
+
+  app.get("/episodes/:id/scenes", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const episode = requireEpisode(id);
+    const hashes = episodeHashes(deps.repo, id);
+    if (hashes.manifest === null) {
+      void reply
+        .status(404)
+        .type("text/html")
+        .send(errorPage(404, "The plan stage has not produced a scene manifest yet."));
+      return;
+    }
+    void reply
+      .type("text/html")
+      .send(scenesPage(episode, loadSceneManifest(deps.storage, hashes.manifest), enabled(hashes)));
+  });
+
+  app.get("/episodes/:id/artifacts", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const episode = requireEpisode(id);
+    const hashes = episodeHashes(deps.repo, id);
+    const items: ArtifactRowView[] = (hashes.job?.steps ?? []).flatMap((step) =>
+      step.artifacts.map((artifact) => ({
+        stage: step.key,
+        role: artifact.role,
+        kind: artifact.kind,
+        hash: artifact.hash,
+        missing: !deps.storage.has(artifact.hash),
+      })),
+    );
+    void reply
+      .type("text/html")
+      .send(artifactsPage(episode, items, enabled(hashes), hashes.video, hashes.thumbnail));
+  });
+
+  app.get("/episodes/:id/qa", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const episode = requireEpisode(id);
+    const hashes = episodeHashes(deps.repo, id);
+    if (hashes.qa === null) {
+      void reply
+        .status(404)
+        .type("text/html")
+        .send(errorPage(404, "The QA stage has not produced a report yet."));
+      return;
+    }
+    void reply
+      .type("text/html")
+      .send(qaPage(episode, loadQAReport(deps.storage, hashes.qa), enabled(hashes)));
+  });
+
+  // ── raw artifact bytes ───────────────────────────────────────────────────
+
+  app.get("/artifacts/:hash", async (request, reply) => {
+    const { hash } = request.params as { hash: string };
+    if (!HEX64.test(hash)) {
+      void reply
+        .status(404)
+        .type("text/html")
+        .send(errorPage(404, "Not an artifact address (expected a sha256 hash)."));
+      return;
+    }
+    const row: ArtifactRow | undefined = deps.repo.getArtifact(hash);
+    if (row === undefined || !deps.storage.has(hash)) {
+      void reply
+        .status(404)
+        .type("text/html")
+        .send(errorPage(404, "No artifact with that hash, or its bytes are gone."));
+      return;
+    }
+    const query = request.query as { download?: string };
+    const type = contentTypeOf(row.kind);
+    void reply
+      .type(type)
+      .header(
+        "content-disposition",
+        query.download === "1" ? `attachment; filename="${hash.slice(0, 12)}"` : "inline",
+      )
+      .send(deps.storage.read(hash));
   });
 
   return app;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
