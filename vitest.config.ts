@@ -24,6 +24,7 @@ export default defineConfig({
       "@nexus/render": resolveFromRoot("./packages/render/src/index.ts"),
       "@nexus/video": resolveFromRoot("./packages/video/src/index.ts"),
       "@nexus/qa": resolveFromRoot("./packages/qa/src/index.ts"),
+      "@nexus/shorts": resolveFromRoot("./packages/shorts/src/index.ts"),
     },
   },
   test: {

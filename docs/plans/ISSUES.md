@@ -248,6 +248,19 @@ Last updated: end of **Phase 12** (automated QA engine).
 | QA can BLOCK publication | 🟢 | `publishable = counts.errors === 0`; `assertPublishable` throws `QABlockedError`; the `qa` stage (after `render`, before `approval`) stores the report either way and then throws `PermanentError` when blocked — the job fails, the episode lands `FAILED`, approval/publish never run; `validateReuse` refuses blocked or stale QA results. Proven end to end by the e2e suite (a real render passes; an unsupported claim and a swapped video are refused). |
 | Tests: passing AND failing examples | 🟢 | 8 suites / 98 tests in `@nexus/qa`: every code exercised through at least one broken document, the clean fixture asserted first in every suite, plus `settings` (the `NEXUS_QA_*` contract) and a real-FFmpeg e2e suite (3 tests, real x264 render; skips loudly without a binary). Full verify: **76 files / 880 tests** (Phase 11: 68 / 780) with a real binary — `@nexus/qa` contributes 8 suites / 98 tests and `@nexus/config` 2 more (the QA thresholds). |
 
+## Phase 14 — status of the requested items
+
+| Requested | Status | Notes |
+|-----------|--------|-------|
+| Turn a completed longform episode into vertical short(s) | 🟢 | `@nexus/shorts`: `selectShorts` over the real manifest + narration track, `verticalReflow` to a 9:16 manifest + layout + re-based track (`docs/architecture/shorts.md`). |
+| Analyze script/audio/caption timings | 🟢 | Candidate timecodes are the *spoken* windows (`sceneWindowsOf` over the real track segments/sentences) — a scene the TTS read fast is cut where the speech ends, not where the plan guessed. |
+| Select highlight moments | 🟢 | 7 scored factors (hook/curiosity/surprise/standalone/payoff/emotion/visual), each with its reasons; best-first non-overlapping spans under the config's duration bounds (15–60 s default) and candidate cap. |
+| Standalone (no missing context) | 🟢 | Hard rejections with codes + reasons: unresolved-pron opener, connective opener, backward reference, unfinished contrast, dangling promise; soft penalties recorded for mid-section starts and leaning openers. "This bridge …" resolves itself and is NOT rejected — pinned by a test. |
+| Rewrite for vertical delivery / 9:16 layout | 🟢 | `verticalReflow` re-composes per scene (wide→medium, focus-following window from the presenter's slot / text anchor / media bias; corner→lower_third text; split_screen→overlay; vertical diagram flow) — recorded as data with reasons, explicitly not a crop. |
+| Render with the existing video pipeline | 🟡 | The engine emits a validating 9:16 manifest (through `validateSceneManifest`) and the render engine is resolution-agnostic; wiring a shorts render stage into the worker is **pending** (below). |
+| Publishing | 🟢 (excluded) | Publishing stays out of Phase 14 by scope; Phase 15 owns it. |
+| Tests | 🟢 | 24 tests over a REAL fixture episode (six scenes synthesized through the fake TTS): selection alignment/rejections/determinism + reflow validity/re-timing/audio-identity/layout decisions. Full suite 79 files / 917 tests, format/lint/tsc clean. |
+
 ## Phase 13 — status of the requested items
 
 | Requested | Status | Notes |

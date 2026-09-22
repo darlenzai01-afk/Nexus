@@ -177,10 +177,11 @@ binds to `127.0.0.1` by default — no public surface.
 | —          | **Session 11:** cloud-compatible rendering pipeline              | ✅ delivered (`docs/architecture/video-rendering.md`)                                                       |
 | —          | **Session 12:** automated QA engine (blocks publication)         | ✅ delivered (`docs/architecture/qa-engine.md`)                                                             |
 | —          | **Session 13:** minimal functional operator dashboard            | ✅ delivered (`docs/architecture/dashboard.md`)                                                             |
+| —          | **Session 14:** short-form repurposing engine (shorts)           | ✅ delivered (`docs/architecture/shorts.md`)                                                                |
 | 1          | Hard loop: script → scene graph → voice → captions → render → QA | scene graph ✅, voice ✅, captions ✅, render ✅, QA ✅; `approval`/`publish` stages pending (plan-Phase 5) |
 | 2          | Research + fact-check with claim/evidence traceability           | research ✅, script ✅, scenes ✅; `fact_check` stage pending                                               |
 | 3          | Full long-form pipeline + media/license engine                   | pending                                                                                                     |
-| 4          | Shorts pipeline (9:16 re-render from scene graph)                | pending                                                                                                     |
+| 4          | Shorts pipeline (9:16 re-render from scene graph)                | engine ✅ (selection + 9:16 reflow, `docs/architecture/shorts.md`); stage wiring pending                    |
 | 5          | Publishing (upload kit first, YouTube API after audit)           | pending                                                                                                     |
 
 **Delivered so far on this branch:** (a) the provider layer — six capability
