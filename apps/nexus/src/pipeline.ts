@@ -1,3 +1,10 @@
+import { loadQAReport } from "@nexus/qa";
+import type {
+  PublishMetadata,
+  PublishProvider,
+  PublishRef,
+  PublishStatusReport,
+} from "@nexus/providers";
 import { PermanentError, type Task, type TaskContext, type TaskResult } from "@nexus/jobs";
 import { loadResearchPackage, type ResearchPackage } from "@nexus/research";
 import {
@@ -8,7 +15,7 @@ import {
 } from "@nexus/scenes";
 import type { BlobStore } from "@nexus/storage";
 import type { AppConfig } from "@nexus/config";
-import type { Repo } from "@nexus/db";
+import type { ArtifactKind, Repo } from "@nexus/db";
 
 import { LONG_FORM_PIPELINE, stageKeys, type PipelineDef } from "@nexus/jobs";
 
@@ -22,10 +29,11 @@ import { LONG_FORM_PIPELINE, stageKeys, type PipelineDef } from "@nexus/jobs";
  * park the job when a human must decide. They live here, in the app layer,
  * because that policy *is* the app's, not an engine's.
  *
- * The `publish` stage is deliberately **not** implemented and not registered:
- * uploading (YouTube) arrives in a later phase, so dashboard jobs simply do
- * not include the stage — an approved episode ends at `approval` with the
- * episode `READY`, which is the honest state of "nothing is published yet".
+ * The `publish` stage is *not* part of the dashboard run: an approved episode
+ * ends at `approval` with the episode `READY` — the honest state of "nothing
+ * is published yet". Publishing is an explicit second job the operator starts
+ * from the episode page (`createPublishTask`), and it re-checks the QA verdict
+ * itself: nothing uploads unless the episode is in an approved QA state.
  */
 
 /**
@@ -379,4 +387,381 @@ export function createApprovalTask(): Task {
       };
     },
   };
+}
+
+// ── publish ─────────────────────────────────────────────────────────────────
+
+/** The kind/role the publish stage's durable record is registered under. */
+export const PUBLISH_RECORD_KIND = "metadata" as const;
+export const PUBLISH_RECORD_ROLE = "publish_record" as const;
+export const PUBLISH_CONFIRMATION_ROLE = "publish_confirmation" as const;
+
+export interface PublishTaskDeps {
+  readonly storage: BlobStore;
+  readonly repo: Repo;
+  /** The configured publishing capability (fake / manual / youtube). */
+  readonly publisher: PublishProvider;
+  /** `"publish"` (long-form) or `"short_publish"`; default `"publish"`. */
+  readonly stageKey?: "publish" | "short_publish";
+}
+
+/**
+ * The publish stage: the LAST thing that runs, and the one that must never run
+ * by accident.
+ *
+ * **The QA gate is the task's own, re-checked here** — defence in depth. The
+ * stage graph only lets `publish` follow `approval`, but this task does not
+ * trust wiring: it loads the QA report the episode was approved on and refuses
+ * (a `PermanentError`, so no retry can sneak past) unless
+ *
+ *   1. the report exists, reads back, `verdict` is `pass`/`pass_with_warnings`
+ *      and `publishable` is true — a *failed* QA report means the episode must
+ *      not be published, full stop;
+ *   2. an `approved` decision exists at the episode's approval gate
+ *      (`FINAL_APPROVAL` / `SHORT_APPROVAL`) — QA passing alone is not consent;
+ *   3. the episode is in an approved state (`READY`/`PUBLISHING`).
+ *
+ * Retry handling: gate violations and invalid metadata are permanent (the
+ * runner fails the step, evidence attached); transport/5xx/429 failures stay
+ * retryable inside the provider call (backoff) and across stage attempts. A
+ * re-invocation of an already-published episode returns the recorded ref
+ * without uploading again — YouTube has no idempotency key, so the record is
+ * the dedup.
+ */
+export function createPublishTask(deps: PublishTaskDeps): Task {
+  const stageKey = deps.stageKey ?? "publish";
+  return {
+    stageKey,
+
+    async execute(ctx: TaskContext): Promise<TaskResult> {
+      // ── The inputs: the same job when the stage rides it, else the
+      // episode's latest completed stages (a standalone publish job has no
+      // upstream — the episode's own run is the source of truth). ──
+      const qaReportHash =
+        upstreamHash(ctx, "qa", "reportHash") ?? latestEpisodeHash(deps, ctx.job.episode_id, "qa");
+      const videoHash =
+        upstreamHash(ctx, "render", "videoHash") ??
+        latestEpisodeHash(deps, ctx.job.episode_id, "video");
+      const thumbnailHash =
+        upstreamHash(ctx, "render", "thumbnailHash") ??
+        latestEpisodeHash(deps, ctx.job.episode_id, "thumbnail");
+
+      // ── GATE 1: an approved QA state, verified from the report itself ──
+      if (qaReportHash === undefined) {
+        throw new PermanentError(
+          "publishing requires an approved QA state: no QA report was produced for this episode",
+        );
+      }
+      let report;
+      try {
+        report = loadQAReport(deps.storage, qaReportHash);
+      } catch (error) {
+        throw new PermanentError(
+          `publishing requires an approved QA state: the QA report ${qaReportHash.slice(0, 12)}… cannot be read: ${messageOf(error)}`,
+        );
+      }
+      if (report.verdict === "fail" || !report.publishable) {
+        throw new PermanentError(
+          `the episode failed QA (verdict ${report.verdict}, publishable ${report.publishable}) — ` +
+            "it must not be published" +
+            (report.blocking.length > 0 ? ` (blocking: ${report.blocking.join(", ")})` : ""),
+        );
+      }
+
+      // ── GATE 2: the operator's approval at the episode's gate ──
+      const approvals = deps.repo.listApprovals(ctx.job.episode_id);
+      const approved = approvals.find(
+        (approval) =>
+          approval.decision === "approved" &&
+          (approval.gate === "FINAL_APPROVAL" || approval.gate === "SHORT_APPROVAL"),
+      );
+      if (approved === undefined) {
+        throw new PermanentError(
+          "publishing requires the operator's approval: no approved FINAL_APPROVAL/" +
+            "SHORT_APPROVAL decision exists for this episode",
+        );
+      }
+
+      // ── Dedup: never upload the same episode twice ──
+      if (videoHash !== undefined) {
+        const existing = findPublishedRecord(deps, ctx.job.episode_id, videoHash);
+        if (existing !== undefined) {
+          const refId = (existing.output as { refId?: string } | undefined)?.refId ?? "?";
+          ctx.log("publish.already", `episode already published as ${refId} — not re-uploading`);
+          return existing;
+        }
+      }
+
+      // ── GATE 3: the episode sits in an approved state ──
+      const state = ctx.episode.state;
+      if (state !== "READY" && state !== "PUBLISHING") {
+        throw new PermanentError(
+          `publishing requires an approved episode: this one is ${state} (an episode that failed ` +
+            "QA or was rejected must not be publishable)",
+        );
+      }
+
+      // ── The upload itself ──
+      if (videoHash === undefined) {
+        throw new PermanentError(
+          "publish stage has no video: run the render stage first, or pass params.videoHash",
+        );
+      }
+      const metadata = publishMetadataOf(ctx, publishRequestOf(deps.storage, ctx.job));
+      const correlationId = ctx.job.id;
+      const uploaded = await deps.publisher.upload(videoHash, metadata, {
+        correlationId,
+        signal: ctx.signal,
+      });
+      const ref: PublishRef = uploaded.value;
+
+      // Where does the video stand? Best effort: a probe failure must not
+      // fail the stage *after* a successful upload.
+      let status: PublishStatusReport | undefined;
+      if (ref.mode === "api" && deps.publisher.status !== undefined) {
+        try {
+          status = (await deps.publisher.status(ref, { correlationId, signal: ctx.signal })).value;
+        } catch (error) {
+          ctx.log(
+            "publish.status_failed",
+            `upload succeeded but the status probe failed: ${messageOf(error)}`,
+          );
+        }
+      }
+
+      // ── The durable record + the human-readable confirmation ──
+      // `output` is stored inside the record so a re-run can adopt the exact
+      // prior result (the dedup reads the record back).
+      const output = {
+        refId: ref.id,
+        provider: ref.provider,
+        mode: ref.mode,
+        status: ref.status,
+        ...(ref.url !== undefined ? { url: ref.url } : {}),
+        ...(status !== undefined ? { uploadStatus: status.uploadStatus } : {}),
+        recordHash: "",
+        videoHash,
+        qaReportHash,
+      };
+      const record = {
+        version: 1,
+        episodeId: ctx.job.episode_id,
+        jobId: ctx.job.id,
+        videoHash,
+        ...(thumbnailHash !== undefined ? { thumbnailHash } : {}),
+        qaReportHash,
+        metadata: { ...metadata },
+        ref,
+        ...(status !== undefined ? { status } : {}),
+        output,
+        publishedAt: new Date().toISOString(),
+      };
+      const recordBytes = new TextEncoder().encode(JSON.stringify(record, null, 2));
+      const stored = deps.storage.put(recordBytes);
+      deps.repo.registerArtifact({
+        hash: stored.hash,
+        kind: PUBLISH_RECORD_KIND,
+        bytes: stored.bytes,
+      });
+
+      const confirmation =
+        ref.mode === "manual" && ref.kit !== undefined
+          ? [
+              `# Upload kit for "${metadata.title}"`,
+              "",
+              ...ref.kit.instructions,
+              "",
+              ...ref.kit.files.map(
+                (file) =>
+                  `- ${file.role}: ${file.suggestedName} (${file.mime}) — ${file.hash.slice(0, 12)}…`,
+              ),
+              "",
+              "The episode is published when you upload these files; the record above stays as the audit trail.",
+            ].join("\n")
+          : [
+              `# Published: ${metadata.title}`,
+              "",
+              `- provider: ${ref.provider} (${ref.mode})`,
+              `- status: ${ref.status}${status !== undefined ? ` / upload ${status.uploadStatus}` : ""}`,
+              ref.url !== undefined ? `- url: ${ref.url}` : "- url: (none)",
+              `- video: ${videoHash.slice(0, 12)}…`,
+              `- QA report: ${qaReportHash.slice(0, 12)}…`,
+            ].join("\n");
+      const docBytes = new TextEncoder().encode(confirmation);
+      const docStored = deps.storage.put(docBytes);
+      deps.repo.registerArtifact({
+        hash: docStored.hash,
+        kind: "document",
+        bytes: docStored.bytes,
+      });
+
+      ctx.log("publish.done", `${ref.status}: ${metadata.title}`, {
+        provider: ref.provider,
+        mode: ref.mode,
+        url: ref.url ?? "",
+      });
+
+      return {
+        output: { ...output, recordHash: stored.hash, confirmationHash: docStored.hash },
+        artifacts: [
+          { hash: stored.hash, kind: PUBLISH_RECORD_KIND, role: PUBLISH_RECORD_ROLE },
+          { hash: docStored.hash, kind: "document", role: PUBLISH_CONFIRMATION_ROLE },
+        ],
+      };
+    },
+  };
+}
+
+/**
+ * The operator's publish request, carried content-addressed in the job's
+ * idempotency key (`publish:<episodeId>:<requestHash>` — the route registered
+ * the request as an artifact). A job created without one publishes with the
+ * honest defaults (the topic as title and description, private).
+ */
+function publishRequestOf(storage: BlobStore, job: TaskContext["job"]): PublishRequest | undefined {
+  const key = job.idempotency_key ?? "";
+  const match = /^publish:[^:]+:([0-9a-f]{64})$/u.exec(key);
+  if (match === null) return undefined;
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(storage.read(match[1]!))) as PublishRequest;
+    if (parsed.version !== 1 || typeof parsed.title !== "string") return undefined;
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+export interface PublishRequest {
+  readonly version: 1;
+  readonly episodeId: string;
+  readonly title: string;
+  readonly description: string;
+  readonly privacyStatus: PublishMetadata["privacyStatus"];
+  readonly scheduledAt?: string;
+  readonly tags?: readonly string[];
+  readonly requestedBy: string;
+  readonly requestedAt: string;
+}
+
+/** The metadata the stage publishes with — the request first, honest defaults. */
+function publishMetadataOf(ctx: TaskContext, request: PublishRequest | undefined): PublishMetadata {
+  const topic = ctx.episode.topic.trim();
+  const title = (request?.title ?? topic).trim().slice(0, 100);
+  const description = (request?.description ?? topic).trim();
+  return {
+    title: title !== "" ? title : "Untitled episode",
+    description,
+    ...(request?.tags !== undefined && request.tags.length > 0 ? { tags: [...request.tags] } : {}),
+    privacyStatus: request?.privacyStatus ?? "private",
+    ...(request?.scheduledAt !== undefined && request.scheduledAt.trim() !== ""
+      ? { scheduledAt: request.scheduledAt.trim() }
+      : {}),
+  };
+}
+
+/**
+ * The episode's latest hash of one kind, from its runs' completed steps —
+ * the QA report from the `qa` step (output first, evidence artifact as
+ * fallback), the video/thumbnail from the `render` step's artifacts.
+ */
+function latestEpisodeHash(
+  deps: PublishTaskDeps,
+  episodeId: string,
+  what: "qa" | "video" | "thumbnail",
+): string | undefined {
+  const jobs = deps.repo.listJobs(episodeId);
+  for (const job of [...jobs].sort((left, right) =>
+    right.created_at.localeCompare(left.created_at),
+  )) {
+    for (const step of deps.repo.listJobSteps(job.id)) {
+      if (step.state !== "DONE") continue;
+      if (what === "qa") {
+        if (step.step_key !== "qa" && step.step_key !== "short_qa") continue;
+        const output = parseStepOutput(step.output);
+        const fromOutput = readHash(output?.reportHash);
+        if (fromOutput !== undefined) return fromOutput;
+        const fromArtifacts = parseStepArtifacts(step.artifacts).find(
+          (entry) => entry.role === "qa_report",
+        );
+        if (fromArtifacts !== undefined) return fromArtifacts.hash;
+        continue;
+      }
+      if (step.step_key !== "render" && step.step_key !== "short_render") continue;
+      const fromArtifacts = parseStepArtifacts(step.artifacts).find((entry) => entry.kind === what);
+      if (fromArtifacts !== undefined) return fromArtifacts.hash;
+    }
+  }
+  return undefined;
+}
+
+function parseStepOutput(raw: string | null): Record<string, unknown> | undefined {
+  if (raw === null || raw === "") return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readHash(value: unknown): string | undefined {
+  return typeof value === "string" && /^[0-9a-f]{64}$/u.test(value) ? value : undefined;
+}
+
+/** Parse the artifacts JSON a step row carries (the runner's own shape). */
+function parseStepArtifacts(raw: string): { hash: string; kind: ArtifactKind; role: string }[] {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? (parsed as { hash: string; kind: ArtifactKind; role: string }[])
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The episode's prior publish record, when one exists **for this exact video**.
+ * Reading it back is what makes a double "Publish" press (or a stage retry
+ * after an ack was lost) a no-op instead of a duplicate upload.
+ */
+function findPublishedRecord(
+  deps: PublishTaskDeps,
+  episodeId: string,
+  videoHash: string,
+): TaskResult | undefined {
+  for (const job of deps.repo.listJobs(episodeId)) {
+    for (const step of deps.repo.listJobSteps(job.id)) {
+      if (step.state !== "DONE") continue;
+      if (step.step_key !== "publish" && step.step_key !== "short_publish") continue;
+      const artifacts = parseStepArtifacts(step.artifacts);
+      const recordRef = artifacts.find((entry) => entry.role === PUBLISH_RECORD_ROLE);
+      if (recordRef === undefined) continue;
+      try {
+        const record = JSON.parse(new TextDecoder().decode(deps.storage.read(recordRef.hash))) as {
+          videoHash?: string;
+          output?: Record<string, unknown>;
+        };
+        if (record.videoHash !== videoHash || record.output === undefined) continue;
+        return {
+          output: record.output,
+          artifacts: artifacts.map((entry) => ({
+            hash: entry.hash,
+            kind: entry.kind,
+            role: entry.role,
+          })),
+        };
+      } catch {
+        // A record we cannot read is not a record we can trust to dedup.
+        continue;
+      }
+    }
+  }
+  return undefined;
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

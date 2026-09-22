@@ -2,6 +2,7 @@ import type {
   PublishMetadata,
   PublishProvider,
   PublishRef,
+  PublishStatusReport,
   PublisherQuota,
 } from "../publishing.js";
 import type { InvokeRuntime } from "../runtime.js";
@@ -34,6 +35,12 @@ export class FakePublishProvider implements PublishProvider {
   readonly mode = "fake" as const;
   readonly label = "Fake publisher (deterministic, no upload)";
 
+  /** What this fake has "uploaded" this process, by video id. */
+  private readonly uploaded = new Map<
+    string,
+    { privacyStatus: PublishMetadata["privacyStatus"]; publishAt?: string }
+  >();
+
   constructor(
     private readonly runtime: InvokeRuntime,
     private readonly options: FakePublisherOptions = {},
@@ -59,12 +66,54 @@ export class FakePublishProvider implements PublishProvider {
           );
         }
         const shortId = hashInputs({ videoHash, title: metadata.title }).slice(0, 12);
+        const id = `fake-${shortId}`;
+        this.uploaded.set(id, {
+          privacyStatus: metadata.privacyStatus,
+          ...(metadata.scheduledAt !== undefined ? { publishAt: metadata.scheduledAt } : {}),
+        });
         return {
-          id: `fake-${shortId}`,
+          id,
           provider: this.id,
           mode: "api",
           status: metadata.scheduledAt !== undefined ? "scheduled" : "uploaded",
           url: `https://example.invalid/watch/${shortId}`,
+        };
+      },
+    });
+  }
+
+  /**
+   * The fake remembers what it uploaded (in memory — this adapter simulates a
+   * provider, it is not a record of truth) and reports the same lifecycle the
+   * real probe will: uploaded → processed; a scheduled video stays private
+   * until its publishAt.
+   */
+  async status(ref: PublishRef, ctx?: CallContext): Promise<ProviderResult<PublishStatusReport>> {
+    return this.runtime.invoke<PublishStatusReport>({
+      operation: "publish.status",
+      ...(ctx !== undefined ? { context: ctx } : {}),
+      usage: () => ({ units: 0, unit: "requests" }),
+      execute: async () => {
+        const uploaded = this.uploaded.get(ref.id);
+        const nowIso = this.runtime.clock.nowIso();
+        if (uploaded === undefined) {
+          return {
+            provider: this.id,
+            id: ref.id,
+            uploadStatus: "unknown" as const,
+            checkedAt: nowIso,
+          };
+        }
+        const scheduled =
+          uploaded.publishAt !== undefined && Date.parse(uploaded.publishAt) > Date.parse(nowIso);
+        return {
+          provider: this.id,
+          id: ref.id,
+          uploadStatus: "processed" as const,
+          processingStatus: "succeeded" as const,
+          privacyStatus: scheduled ? ("private" as const) : uploaded.privacyStatus,
+          ...(uploaded.publishAt !== undefined ? { publishAt: uploaded.publishAt } : {}),
+          checkedAt: nowIso,
         };
       },
     });

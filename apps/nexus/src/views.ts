@@ -296,6 +296,17 @@ export function episodePage(params: {
   readonly artifactPages: Record<string, boolean>;
   readonly flashes: { readonly error?: string; readonly notice?: string };
   readonly qaVerdict: string | null;
+  /** The episode cleared the QA gate and is approved — the publish form shows. */
+  readonly canPublish?: boolean;
+  /** The episode's latest successful publish, when there is one. */
+  readonly published?: {
+    readonly url: string | null;
+    readonly status: string;
+    readonly refId: string;
+    readonly provider: string;
+    readonly mode: string;
+    readonly jobState: string;
+  } | null;
 }): string {
   const { episode, job } = params;
   const active = job !== undefined && ["PENDING", "RUNNING", "RETRYING"].includes(job.status);
@@ -340,7 +351,7 @@ export function episodePage(params: {
     notStarted || job?.state === "CANCELED"
       ? `<form method="post" action="/episodes/${attr(episode.id)}/start">
       <button type="submit">${notStarted ? "Start pipeline" : "Start a new run"}</button>
-      <span class="meta"> runs ${attr(episode.kind === "long" ? "longform_v1" : "shorts_v1")} — research → script → plan → media → voice → captions → render → QA → your approval (publishing is not built yet)</span>
+      <span class="meta"> runs ${attr(episode.kind === "long" ? "longform_v1" : "shorts_v1")} — research → script → plan → media → voice → captions → render → QA → your approval; publishing is a separate, explicit step afterwards</span>
     </form>`
       : "";
 
@@ -382,6 +393,54 @@ export function episodePage(params: {
 </div>`
       : "";
 
+  const publishPanel = (() => {
+    if (params.published !== null && params.published !== undefined) {
+      const published = params.published;
+      return `<div class="panel">
+  <h2 style="margin-top:0">Published</h2>
+  <p><strong>${published.url === null ? attr(published.refId) : `<a href="${attr(published.url)}" rel="noreferrer">${attr(published.url)}</a>`}</strong></p>
+  <p class="meta">${attr(published.provider)} · mode ${attr(published.mode)} · status ${attr(published.status)} · publish job ${attr(published.jobState)} · record <code>${shortHash(published.refId)}</code></p>
+</div>`;
+    }
+    if (params.canPublish === true) {
+      return `<div class="panel">
+  <h2 style="margin-top:0">Publish</h2>
+  <p class="meta">Uploads only happen because QA passed and you approved this episode — the publish job re-checks both from the stored report before touching the provider.</p>
+  <form method="post" action="/episodes/${attr(episode.id)}/publish" class="row">
+    <div>
+      <label for="publish-title">Title (≤ 100 chars)</label>
+      <input type="text" id="publish-title" name="title" maxlength="100" value="${attr(episode.topic.slice(0, 100))}" required>
+    </div>
+    <div>
+      <label for="publish-privacy">Privacy</label>
+      <select id="publish-privacy" name="privacyStatus">
+        <option value="private" selected>private</option>
+        <option value="unlisted">unlisted</option>
+        <option value="public">public</option>
+      </select>
+    </div>
+    <div>
+      <label for="publish-schedule">Schedule (optional, UTC)</label>
+      <input type="datetime-local" id="publish-schedule" name="scheduledAt">
+    </div>
+    <div>
+      <label for="publish-tags">Tags (comma-separated, optional)</label>
+      <input type="text" id="publish-tags" name="tags" maxlength="400">
+    </div>
+    <div>
+      <label for="publish-description">Description (defaults to the topic)</label>
+      <textarea id="publish-description" name="description" rows="3" maxlength="5000">${esc(episode.topic)}</textarea>
+    </div>
+    <button type="submit">Queue publish job</button>
+  </form>
+</div>`;
+    }
+    if (episode.state === "READY") {
+      return `<p class="meta">Publishing unlocks once this episode has a passing QA report and a rendered video.</p>`;
+    }
+    return "";
+  })();
+
   const stageTable =
     job === undefined
       ? ""
@@ -418,6 +477,7 @@ ${gatePanel}
 ${retryPanel}
 ${startForm}
 ${qaLine}
+${publishPanel}
 ${stageTable}
 ${logTable}
 ${jsonBlock({ episode, job })}

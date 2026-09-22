@@ -31,6 +31,7 @@ import {
   createApprovalTask,
   createFactCheckTask,
   createIdeaTask,
+  createPublishTask,
   createSourceMediaTask,
   fingerprintParams,
 } from "./pipeline.js";
@@ -124,6 +125,17 @@ export function createPipelineWorker(
       settings: resolveQASettings(config.qa),
     }),
     createApprovalTask(),
+    // Publishing is a real stage of longform_v1/shorts_v1 — an operator starts
+    // it explicitly from the episode page after a run completes. The task
+    // itself re-checks the QA verdict and the approval decision before any
+    // bytes move (see createPublishTask).
+    createPublishTask({ storage, repo, publisher: providers.publishing() }),
+    createPublishTask({
+      storage,
+      repo,
+      publisher: providers.publishing(),
+      stageKey: "short_publish",
+    }),
   ]);
   // A dashboard job declares exactly this step list; anything the registry
   // cannot execute must fail here, not after a job is claimed.

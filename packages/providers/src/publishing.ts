@@ -48,6 +48,26 @@ export interface PublishRef {
   readonly kit?: UploadKit;
 }
 
+/**
+ * Where a published video stands *after* the upload call returned — YouTube
+ * keeps processing (and can reject) a video it accepted. What a status probe
+ * reports, in the abstraction's own words (never the vendor's raw payload).
+ */
+export interface PublishStatusReport {
+  readonly provider: string;
+  /** The provider-side id the probe asked about. */
+  readonly id: string;
+  /** `processed` = playable; `processing` = still working; else the failure. */
+  readonly uploadStatus: "processed" | "processing" | "failed" | "unknown";
+  readonly processingStatus?: "succeeded" | "processing" | "failed" | "terminated";
+  readonly privacyStatus?: PrivacyStatus;
+  /** When a scheduled video will go public (the provider's own echo). */
+  readonly publishAt?: string;
+  /** Why the provider rejected the video, when it did. */
+  readonly rejectionReason?: string;
+  readonly checkedAt: string;
+}
+
 export interface PublisherQuota {
   readonly provider: string;
   readonly window: "none" | "daily" | "monthly";
@@ -66,4 +86,10 @@ export interface PublishProvider extends ProviderMeta {
     ctx?: CallContext,
   ): Promise<ProviderResult<PublishRef>>;
   quota(ctx?: CallContext): Promise<ProviderResult<PublisherQuota>>;
+  /**
+   * Ask where an uploaded video stands now (processed / processing /
+   * rejected). Optional: the manual path has nothing to probe — the *kit* is
+   * the status — and a provider that cannot answer says so.
+   */
+  status?(ref: PublishRef, ctx?: CallContext): Promise<ProviderResult<PublishStatusReport>>;
 }

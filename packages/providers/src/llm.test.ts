@@ -253,7 +253,7 @@ describe("OpenAICompatibleLLMProvider (real adapter, stub transport)", () => {
       transport: async (url, init) => {
         requests.push({
           url,
-          body: JSON.parse(init?.body ?? "{}"),
+          body: JSON.parse(typeof init?.body === "string" ? init.body : "{}"),
           headers: { ...(init?.headers ?? {}) },
         });
         return completion(JSON.stringify({ scenes: [{ id: "s1" }] }), 120);
@@ -290,7 +290,9 @@ describe("OpenAICompatibleLLMProvider (real adapter, stub transport)", () => {
     const { provider } = make({
       env: { NEXUS_LLM_API_KEY: "k" },
       transport: async (_url, init) => {
-        seenModel = (JSON.parse(init?.body ?? "{}") as { model: string }).model;
+        seenModel = (
+          JSON.parse(typeof init?.body === "string" ? init.body : "{}") as { model: string }
+        ).model;
         return completion('{"ok":true}');
       },
     });
@@ -309,7 +311,9 @@ describe("OpenAICompatibleLLMProvider (real adapter, stub transport)", () => {
     const { provider } = make({
       env: { NEXUS_LLM_API_KEY: "k" },
       transport: async (_url, init) => {
-        const body = JSON.parse(init?.body ?? "{}") as { messages: { content: string }[] };
+        const body = JSON.parse(typeof init?.body === "string" ? init.body : "{}") as {
+          messages: { content: string }[];
+        };
         sent.push(body.messages.map((message) => message.content).join("\n"));
         call += 1;
         return call === 1 ? completion("I think the answer is 42!") : completion('{"answer":42}');

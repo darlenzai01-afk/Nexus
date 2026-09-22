@@ -9,7 +9,12 @@ import { loadScriptDoc } from "@nexus/script";
 import type { BlobStore } from "@nexus/storage";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 
-import { DASHBOARD_PIPELINE, DASHBOARD_STEPS } from "./pipeline.js";
+import {
+  DASHBOARD_PIPELINE,
+  DASHBOARD_STEPS,
+  PUBLISH_RECORD_ROLE,
+  type PublishRequest,
+} from "./pipeline.js";
 import {
   artifactsPage,
   episodePage,
@@ -84,6 +89,59 @@ function stepOutput(repo: Repo, jobId: string, stage: string): Record<string, un
 function hashOf(output: Record<string, unknown>, key: string): string | null {
   const value = output[key];
   return typeof value === "string" && HEX64.test(value) ? value : null;
+}
+
+/**
+ * The episode's latest successful publish — the URL and status the episode
+ * page shows, read back from the publish stage's durable record.
+ */
+function publishedView(
+  repo: Repo,
+  storage: BlobStore,
+  episodeId: string,
+): {
+  url: string | null;
+  status: string;
+  refId: string;
+  provider: string;
+  mode: string;
+  jobState: string;
+} | null {
+  const jobs = [...repo.listJobs(episodeId)].sort((left, right) =>
+    right.created_at.localeCompare(left.created_at),
+  );
+  for (const job of jobs) {
+    for (const step of repo.listJobSteps(job.id)) {
+      if (step.state !== "DONE") continue;
+      if (step.step_key !== "publish" && step.step_key !== "short_publish") continue;
+      let artifacts: { hash: string; kind: string; role: string }[] = [];
+      try {
+        const parsed: unknown = JSON.parse(step.artifacts);
+        if (Array.isArray(parsed)) artifacts = parsed as typeof artifacts;
+      } catch {
+        continue;
+      }
+      const recordRef = artifacts.find((entry) => entry.role === PUBLISH_RECORD_ROLE);
+      if (recordRef === undefined) continue;
+      try {
+        const record = JSON.parse(new TextDecoder().decode(storage.read(recordRef.hash))) as {
+          ref?: { id?: string; url?: string; status?: string; provider?: string; mode?: string };
+        };
+        if (record.ref?.id === undefined) continue;
+        return {
+          url: typeof record.ref.url === "string" ? record.ref.url : null,
+          status: typeof record.ref.status === "string" ? record.ref.status : "?",
+          refId: record.ref.id,
+          provider: typeof record.ref.provider === "string" ? record.ref.provider : "?",
+          mode: typeof record.ref.mode === "string" ? record.ref.mode : "?",
+          jobState: job.state,
+        };
+      } catch {
+        continue;
+      }
+    }
+  }
+  return null;
 }
 
 /** An episode's key artifact hashes, resolved from the latest job's steps. */
@@ -300,6 +358,134 @@ export async function buildApp(
     }
   });
 
+  // ── publish (explicit, QA-gated, Phase 15) ──────────────────────────────
+  app.post("/episodes/:id/publish", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const episode = deps.repo.requireEpisode(id);
+      const title = field(request.body, "title").slice(0, 100);
+      const description = field(request.body, "description").slice(0, 5000);
+      const privacyRaw = field(request.body, "privacyStatus");
+      const privacyStatus =
+        privacyRaw === "unlisted" || privacyRaw === "public" ? privacyRaw : "private";
+      const scheduledAt = field(request.body, "scheduledAt");
+      const tags = field(request.body, "tags")
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter((tag) => tag !== "");
+
+      // The same guards the publish task enforces, here for fast feedback —
+      // the task re-checks everything from durable state before any bytes move.
+      const active = deps.repo
+        .listJobs(id)
+        .find((job) => ["PENDING", "RUNNING", "WAITING_GATE"].includes(job.state));
+      if (active !== undefined) {
+        redirectToEpisode(reply, id, {
+          error: `a run is already ${active.state.toLowerCase()} — resolve it first`,
+        });
+        return;
+      }
+      // A second press after a successful publish is a no-op, not a duplicate
+      // (checked before the state guard: PUBLISHED is the *good* outcome).
+      const existing = publishedView(deps.repo, deps.storage, id);
+      if (existing !== null) {
+        redirectToEpisode(reply, id, {
+          notice:
+            `already published (${existing.url ?? existing.refId}) — the record stands; ` +
+            "nothing was uploaded again",
+        });
+        return;
+      }
+      if (episode.state !== "READY") {
+        redirectToEpisode(reply, id, {
+          error:
+            "publishing requires an approved episode — this one is " +
+            `${episode.state} (failed or rejected runs are not publishable)`,
+        });
+        return;
+      }
+      const hashes = episodeHashes(deps.repo, id);
+      if (hashes.qa === null) {
+        redirectToEpisode(reply, id, {
+          error: "publishing requires an approved QA state — no QA report exists yet",
+        });
+        return;
+      }
+      const report = loadQAReport(deps.storage, hashes.qa);
+      if (report.verdict === "fail" || !report.publishable) {
+        redirectToEpisode(reply, id, {
+          error: `the episode failed QA (verdict ${report.verdict}) — it must not be published`,
+        });
+        return;
+      }
+      const approved = deps.repo
+        .listApprovals(id)
+        .find(
+          (approval) =>
+            approval.decision === "approved" &&
+            (approval.gate === "FINAL_APPROVAL" || approval.gate === "SHORT_APPROVAL"),
+        );
+      if (approved === undefined) {
+        redirectToEpisode(reply, id, {
+          error:
+            "publishing requires the operator's approval — approve the episode's final gate first",
+        });
+        return;
+      }
+      if (hashes.video === null) {
+        redirectToEpisode(reply, id, {
+          error: "nothing to publish — the render stage has not produced a video",
+        });
+        return;
+      }
+      if (title === "") {
+        redirectToEpisode(reply, id, { error: "a publish title is required" });
+        return;
+      }
+
+      // The operator's choices travel content-addressed: the request is an
+      // artifact, and its hash rides the job's idempotency key — the publish
+      // task reads it back from durable state (never from a request body).
+      const publishRequest: PublishRequest = {
+        version: 1,
+        episodeId: id,
+        title,
+        description: description !== "" ? description : episode.topic.trim(),
+        privacyStatus,
+        ...(scheduledAt !== "" ? { scheduledAt: new Date(scheduledAt).toISOString() } : {}),
+        ...(tags.length > 0 ? { tags } : {}),
+        requestedBy: "dashboard",
+        requestedAt: (deps.now ?? (() => new Date()))().toISOString(),
+      };
+      if (
+        publishRequest.scheduledAt !== undefined &&
+        Number.isNaN(Date.parse(publishRequest.scheduledAt))
+      ) {
+        redirectToEpisode(reply, id, { error: "scheduled date is not a valid date" });
+        return;
+      }
+      const requestBytes = new TextEncoder().encode(JSON.stringify(publishRequest));
+      const stored = deps.storage.put(requestBytes);
+      deps.repo.registerArtifact({ hash: stored.hash, kind: "metadata", bytes: stored.bytes });
+
+      const steps = episode.kind === "long" ? (["publish"] as const) : (["short_publish"] as const);
+      const pipeline = episode.kind === "long" ? "longform_v1" : "shorts_v1";
+      const jobs = deps.repo.listJobs(id);
+      deps.repo.createJob({
+        episodeId: id,
+        pipeline,
+        steps,
+        idempotencyKey: `publish:${id}:${stored.hash}`,
+        maxAttempts: 3,
+      });
+      void redirectToEpisode(reply, id, {
+        notice: `publish job queued (${jobs.length + 1} jobs total) — publishing re-checks the approved QA state before uploading`,
+      });
+    } catch (error) {
+      void redirectToEpisode(reply, id, { error: errorMessage(error) });
+    }
+  });
+
   // ── gate decisions + retry ───────────────────────────────────────────────
   app.post("/jobs/:id/approve", async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -406,6 +592,7 @@ export async function buildApp(
         return null;
       }
     })();
+    const published = publishedView(deps.repo, deps.storage, id);
     void reply.type("text/html").send(
       episodePage({
         episode,
@@ -414,6 +601,13 @@ export async function buildApp(
         artifactPages: enabled(hashes),
         flashes: { error: query.error, notice: query.notice },
         qaVerdict,
+        canPublish:
+          episode.state === "READY" &&
+          hashes.qa !== null &&
+          qaVerdict !== null &&
+          qaVerdict !== "fail" &&
+          hashes.video !== null,
+        ...(published !== null ? { published } : {}),
       }),
     );
   });

@@ -151,6 +151,7 @@ export type {
   PublishMetadata,
   PublishProvider,
   PublishRef,
+  PublishStatusReport,
   PublisherQuota,
   UploadKit,
   UploadKitFile,
@@ -182,6 +183,9 @@ export {
   ManualResearchProvider,
   ManualTTSProvider,
 } from "./manual.js";
+
+// ── The real publishing adapter ───────────────────────────────────────────
+export { YouTubePublishProvider, type YouTubePublishOptions } from "./real/youtube.js";
 
 // ── Deterministic fakes ───────────────────────────────────────────────────
 export {

@@ -248,6 +248,26 @@ Last updated: end of **Phase 12** (automated QA engine).
 | QA can BLOCK publication | 🟢 | `publishable = counts.errors === 0`; `assertPublishable` throws `QABlockedError`; the `qa` stage (after `render`, before `approval`) stores the report either way and then throws `PermanentError` when blocked — the job fails, the episode lands `FAILED`, approval/publish never run; `validateReuse` refuses blocked or stale QA results. Proven end to end by the e2e suite (a real render passes; an unsupported claim and a swapped video are refused). |
 | Tests: passing AND failing examples | 🟢 | 8 suites / 98 tests in `@nexus/qa`: every code exercised through at least one broken document, the clean fixture asserted first in every suite, plus `settings` (the `NEXUS_QA_*` contract) and a real-FFmpeg e2e suite (3 tests, real x264 render; skips loudly without a binary). Full verify: **76 files / 880 tests** (Phase 11: 68 / 780) with a real binary — `@nexus/qa` contributes 8 suites / 98 tests and `@nexus/config` 2 more (the QA thresholds). |
 
+## Phase 15 — status of the requested items
+
+| Requested | Status | Notes |
+|-----------|--------|-------|
+| Build through the existing publishing abstraction | 🟢 | The provider layer's `PublishProvider` (`upload`/`quota`) gains the real `youtube` adapter (`mode: "live"`, registered in the container) beside `none`/`fake`/`manual`; the publish stage task (`createPublishTask`) is app glue like the other stages. |
+| OAuth | 🟢 | Refresh-token grant → short-lived access token cached in memory; refresh a minute early; a 401 refreshes once mid-call and the invoke pipeline's retry rides the new token. The consent screen/audit is operator-side (documented). |
+| Upload | 🟢 | YouTube resumable protocol (init → session `Location` → `PUT` bytes from the CAS); `FetchLike` now carries binary bodies; missing artifact bytes refuse before anything moves. |
+| Title / description | 🟢 | Enforced against YouTube's limits (≤100 / ≤5000) before any HTTP; defaults from the episode topic; operator values travel content-addressed in the publish request artifact. |
+| Metadata | 🟢 | Tags, `categoryId`, language, `madeForKids`; thumbnail via `thumbnails/set` (failure after upload is logged, never fatal — the video exists). |
+| Privacy status | 🟢 | `private`/`unlisted`/`public`, default private. |
+| Scheduling | 🟢 | `status.publishAt`; YouTube's own rule enforced up front (scheduling requires `private`). |
+| Upload status | 🟢 | Optional `PublishProvider.status?(ref)` capability: videos.list → upload/processing/privacy/publishAt/rejection in the abstraction's vocabulary; fake implements it deterministically. |
+| Upload status (operator view) | 🟢 | The episode page shows "Published" with the URL/status from the durable publish record. |
+| Retry handling | 🟢 | Transport/5xx/429 retryable (invoke backoff + runner stage attempts); quota walls fail closed; gate/validation failures permanent; a re-press after success is a dedup no-op (route notice + task-level record reuse). |
+| **Publishing MUST require an approved QA state** | 🟢 | `createPublishTask` loads the QA report itself and hard-refuses (`PermanentError`, no upload call) on missing report, `verdict: fail`, or `publishable: false`; requires an `approved` FINAL_APPROVAL/SHORT_APPROVAL decision and an approved episode state. The dashboard route repeats the checks for feedback; the task repeats them from durable state. Pinned by unit tests AND e2e: the QA-blocked episode's publish POST is refused with no job created; the rejected episode likewise. |
+| Never commit credentials | 🟢 | The three YouTube secrets are env-var names only (`.env.example` lists names with no values); the DB stores `provider_accounts.credentials_env` names (AD-12), never values. |
+| Never log OAuth tokens | 🟢 | Every adapter message passes `neverLog` (pattern redactions + the exact token values seen); token-endpoint errors surface only guarded `error` fields; a test feeds a token-echoing provider body and asserts the warning carries `[REDACTED]`, not the token. |
+| Mocks for automated tests; no real uploads in tests | 🟢 | Task tests use the deterministic fake publisher; adapter tests use a scripted transport (no socket); the e2e walk publishes through the worker with `NEXUS_PUBLISHING_PROVIDER=fake`. No test touches the network or a real channel. |
+| Tests | 🟢 | 12 adapter tests (protocol/OAuth/redaction/limits/status/quota) + 7 task tests (the five gate/dedup/request paths) + the e2e publish leg + refusal assertions; full suite **81 files / 936 tests** (+3 skipped), format/lint/tsc clean. |
+
 ## Phase 14 — status of the requested items
 
 | Requested | Status | Notes |

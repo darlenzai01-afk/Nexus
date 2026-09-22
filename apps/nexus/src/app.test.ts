@@ -125,7 +125,7 @@ async function decide(
 
 describe("the dashboard, end to end", () => {
   it("walks an episode from a typed topic to an approved video, through every gate", async () => {
-    const s = await start();
+    const s = await start({ NEXUS_PUBLISHING_PROVIDER: "fake" });
     try {
       // ── create ──
       const episodeId = await createEpisode(s, "Why the Kira bridge hums at dusk");
@@ -210,6 +210,18 @@ describe("the dashboard, end to end", () => {
       const notAnArtifact = await s.app.inject({ method: "GET", url: "/artifacts/deadbeef" });
       expect(notAnArtifact.statusCode).toBe(404);
 
+      // ── publishing refuses while a run is still open (nothing queues
+      // behind an unresolved run) — the CRITICAL state/QA refusals are pinned
+      // by the reject and QA-blocked tests below ──
+      const premature = await s.app.inject({
+        method: "POST",
+        url: `/episodes/${episodeId}/publish`,
+        payload: new URLSearchParams({ title: "Premature", privacyStatus: "public" }).toString(),
+        headers: FORM,
+      });
+      expect(premature.statusCode).toBe(303);
+      expect(premature.headers.location as string).toContain("error=");
+
       // ── approve the final gate: the job completes, the episode is READY ──
       await decide(s, jobId, "approve", { notes: "ship it" });
       // The approval step itself still needs one worker pass to finish.
@@ -218,8 +230,58 @@ describe("the dashboard, end to end", () => {
       expect(s.repo.requireEpisode(episodeId).state).toBe("READY");
       expect(finished.failure_step).toBeNull();
 
-      // The publish stage was never part of the run — nothing was uploaded.
+      // The publish stage was never part of the run — nothing was uploaded
+      // without the operator asking for it.
       expect(s.repo.listJobSteps(jobId).map((step) => step.step_key)).not.toContain("publish");
+
+      // ── publish: an explicit second job, queued by the operator ──
+      const publish = await s.app.inject({
+        method: "POST",
+        url: `/episodes/${episodeId}/publish`,
+        payload: new URLSearchParams({
+          title: "Why the Kira bridge hums at dusk",
+          description: "A resonance, explained.",
+          privacyStatus: "unlisted",
+          tags: "bridges, acoustics",
+        }).toString(),
+        headers: FORM,
+      });
+      expect(publish.statusCode).toBe(303);
+      expect(publish.headers.location as string).not.toContain("error=");
+      const publishJob = s.repo.listJobs(episodeId).at(-1)!;
+      expect(publishJob.id).not.toBe(jobId);
+      expect(s.repo.listJobSteps(publishJob.id).map((step) => step.step_key)).toEqual(["publish"]);
+
+      // The worker runs it: the publish task re-checks the QA state itself,
+      // then uploads through the fake publisher.
+      const published = (await settle(s, publishJob.id)).job;
+      expect(published.state).toBe("DONE");
+      expect(s.repo.requireEpisode(episodeId).state).toBe("PUBLISHED");
+      const publishStep = s.repo.getJobStep(publishJob.id, "publish")!;
+      expect(publishStep.state).toBe("DONE");
+      const output = JSON.parse(publishStep.output ?? "{}") as {
+        refId: string;
+        url: string;
+        mode: string;
+        recordHash: string;
+      };
+      expect(output.mode).toBe("api");
+      expect(output.url).toContain("https://");
+      const page = await s.app.inject({ method: "GET", url: `/episodes/${episodeId}` });
+      expect(page.body).toContain("Published");
+      expect(page.body).toContain(output.url);
+
+      // Publishing again does not upload twice: the route says so and no job
+      // is created.
+      const jobsAfterPublish = s.repo.listJobs(episodeId).length;
+      const republish = await s.app.inject({
+        method: "POST",
+        url: `/episodes/${episodeId}/publish`,
+        payload: new URLSearchParams({ title: "Why the Kira bridge hums at dusk" }).toString(),
+        headers: FORM,
+      });
+      expect(republish.headers.location as string).toContain("already+published");
+      expect(s.repo.listJobs(episodeId).length).toBe(jobsAfterPublish);
     } finally {
       s.close();
     }
@@ -240,6 +302,17 @@ describe("the dashboard, end to end", () => {
       const page = await s.app.inject({ method: "GET", url: `/episodes/${episodeId}` });
       expect(page.body).toContain("NEEDS_CHANGES");
       expect(page.body).toContain("Start a new run");
+
+      // A rejected episode must not be publishable.
+      const jobsBefore = s.repo.listJobs(episodeId).length;
+      const refused = await s.app.inject({
+        method: "POST",
+        url: `/episodes/${episodeId}/publish`,
+        payload: new URLSearchParams({ title: "Should not work" }).toString(),
+        headers: FORM,
+      });
+      expect(refused.headers.location as string).toContain("error=");
+      expect(s.repo.listJobs(episodeId).length).toBe(jobsBefore);
     } finally {
       s.close();
     }
@@ -300,6 +373,20 @@ describe("the dashboard, end to end", () => {
       expect(again.job.state).toBe("FAILED");
       expect(again.job.attempt).toBeGreaterThan(job.attempt);
       expect(again.job.failure_step).toBe("qa");
+
+      // CRITICAL: a QA-blocked episode must not be publishable — the route
+      // refuses before any job is created.
+      const jobsBefore = s.repo.listJobs(episodeId).length;
+      const blocked = await s.app.inject({
+        method: "POST",
+        url: `/episodes/${episodeId}/publish`,
+        payload: new URLSearchParams({ title: "Should never upload" }).toString(),
+        headers: FORM,
+      });
+      expect(blocked.statusCode).toBe(303);
+      expect(blocked.headers.location as string).toContain("error=");
+      expect(blocked.headers.location as string).toMatch(/failed QA|approved/u);
+      expect(s.repo.listJobs(episodeId).length).toBe(jobsBefore);
     } finally {
       s.close();
     }

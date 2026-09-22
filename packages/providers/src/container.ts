@@ -9,6 +9,7 @@ import { ProviderConfigurationError } from "./errors.js";
 import { FakeLLMProvider, type FakeLLMResponder } from "./fake/llm.js";
 import { FakeMediaProvider } from "./fake/media.js";
 import { FakePublishProvider } from "./fake/publishing.js";
+import { YouTubePublishProvider } from "./real/youtube.js";
 import { FakeResearchProvider } from "./fake/research.js";
 import { MemoryBlobStore, MemoryStorageProvider } from "./fake/storage.js";
 import { FakeTTSProvider } from "./fake/tts.js";
@@ -430,6 +431,15 @@ function registerBuiltins(registry: ProviderRegistry, fakeLLMRespond?: FakeLLMRe
       mode: "manual",
       label: "Manual publish (upload kit)",
       create: (runtime) => new ManualPublishProvider(runtime),
+    },
+    {
+      id: "youtube",
+      kind: "publishing",
+      mode: "live",
+      label: "YouTube Data API v3 (OAuth)",
+      // The transport is the container's (the platform fetch in production, a
+      // stub in tests) — the adapter itself never opens a socket in tests.
+      create: (runtime) => new YouTubePublishProvider(runtime),
     },
   ];
 

@@ -10,7 +10,8 @@
 export interface FetchRequestInit {
   readonly method?: string;
   readonly headers?: Readonly<Record<string, string>>;
-  readonly body?: string;
+  /** Text for JSON/forms; bytes for uploads (video/thumbnail PUTs). */
+  readonly body?: string | Uint8Array;
   readonly signal?: AbortSignal;
 }
 
