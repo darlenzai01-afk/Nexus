@@ -14,6 +14,7 @@
     { "path": "./packages/audio" },
     { "path": "./packages/render" },
     { "path": "./packages/video" },
+    { "path": "./packages/qa" },
     { "path": "./apps/nexus" },
     { "path": "./tests" }
   ]

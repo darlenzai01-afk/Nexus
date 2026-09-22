@@ -1,0 +1,47 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"],
+  "references": [
+    {
+      "path": "../audio"
+    },
+    {
+      "path": "../characters"
+    },
+    {
+      "path": "../config"
+    },
+    {
+      "path": "../db"
+    },
+    {
+      "path": "../jobs"
+    },
+    {
+      "path": "../providers"
+    },
+    {
+      "path": "../render"
+    },
+    {
+      "path": "../research"
+    },
+    {
+      "path": "../scenes"
+    },
+    {
+      "path": "../script"
+    },
+    {
+      "path": "../storage"
+    },
+    {
+      "path": "../video"
+    }
+  ]
+}

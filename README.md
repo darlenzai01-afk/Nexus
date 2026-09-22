@@ -84,6 +84,10 @@ packages/
                     # one MP4 — resumable by segment, reusable by content key, with render
                     # metadata, a render log and coded failure reports, plus the `render`
                     # stage task, a demo tool and a real-binary smoke test
+  qa/               # The automated QA engine (Phase 12): five deterministic checks
+                    # (content, visual, audio, video, pipeline) over the documents the
+                    # earlier stages published, one structured report, and the gate that
+                    # can BLOCK publication — plus the `qa` stage task
 services/           # Intentionally empty — no microservices (AD-01); see its README
 infrastructure/     # Deployment assets (systemd/Docker/litestream) — added in later phases
 tests/              # Cross-package integration tests (unit tests live beside sources)
@@ -153,23 +157,25 @@ binds to `127.0.0.1` by default — no public surface.
 
 ## Roadmap (from the approved plan)
 
-| Plan phase | Scope                                                       | State                                                                   |
-| ---------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
-| 0          | Monorepo, config, tooling, CI, app/worker entrypoints       | ✅ delivered                                                            |
-| —          | **Session 2:** domain schemas + persistence foundation      | ✅ delivered (`docs/architecture/domain-model.md`)                      |
-| —          | **Session 3:** persistent job orchestration foundation      | ✅ delivered (`docs/architecture/job-orchestration.md`)                 |
-| —          | **Session 4:** provider abstraction layer (AD-06/12/13)     | ✅ delivered (`docs/architecture/provider-layer.md`)                    |
-| —          | **Session 5:** research engine (topic → research package)   | ✅ delivered (`docs/architecture/research-engine.md`)                   |
-| —          | **Session 6:** script engine (research package → script)    | ✅ delivered (`docs/architecture/script-engine.md`)                     |
-| —          | **Session 7:** scene manifest (script → six scene types)    | ✅ delivered (`docs/architecture/scene-manifest.md`)                    |
-| —          | **Session 8:** character system (reusable original cast)    | ✅ delivered (`docs/architecture/character-system.md`)                  |
-| —          | **Session 9:** animation & composition engine (one scene)   | ✅ delivered (`docs/architecture/render-engine.md`)                     |
-| —          | **Session 10:** voice + caption/timing architecture         | ✅ delivered (`docs/architecture/audio-captions.md`)                    |
-| 1          | Hard loop: script → scene graph → voice → captions → render | scene graph ✅ (Session 7); voice/render next (OD-1 Remotion, OD-2 TTS) |
-| 2          | Research + fact-check with claim/evidence traceability      | research ✅, script ✅, scenes ✅; `fact_check` stage pending           |
-| 3          | Full long-form pipeline + media/license engine              | pending                                                                 |
-| 4          | Shorts pipeline (9:16 re-render from scene graph)           | pending                                                                 |
-| 5          | Publishing (upload kit first, YouTube API after audit)      | pending                                                                 |
+| Plan phase | Scope                                                            | State                                                                                                       |
+| ---------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| 0          | Monorepo, config, tooling, CI, app/worker entrypoints            | ✅ delivered                                                                                                |
+| —          | **Session 2:** domain schemas + persistence foundation           | ✅ delivered (`docs/architecture/domain-model.md`)                                                          |
+| —          | **Session 3:** persistent job orchestration foundation           | ✅ delivered (`docs/architecture/job-orchestration.md`)                                                     |
+| —          | **Session 4:** provider abstraction layer (AD-06/12/13)          | ✅ delivered (`docs/architecture/provider-layer.md`)                                                        |
+| —          | **Session 5:** research engine (topic → research package)        | ✅ delivered (`docs/architecture/research-engine.md`)                                                       |
+| —          | **Session 6:** script engine (research package → script)         | ✅ delivered (`docs/architecture/script-engine.md`)                                                         |
+| —          | **Session 7:** scene manifest (script → six scene types)         | ✅ delivered (`docs/architecture/scene-manifest.md`)                                                        |
+| —          | **Session 8:** character system (reusable original cast)         | ✅ delivered (`docs/architecture/character-system.md`)                                                      |
+| —          | **Session 9:** animation & composition engine (one scene)        | ✅ delivered (`docs/architecture/render-engine.md`)                                                         |
+| —          | **Session 10:** voice + caption/timing architecture              | ✅ delivered (`docs/architecture/audio-captions.md`)                                                        |
+| —          | **Session 11:** cloud-compatible rendering pipeline              | ✅ delivered (`docs/architecture/video-rendering.md`)                                                       |
+| —          | **Session 12:** automated QA engine (blocks publication)         | ✅ delivered (`docs/architecture/qa-engine.md`)                                                             |
+| 1          | Hard loop: script → scene graph → voice → captions → render → QA | scene graph ✅, voice ✅, captions ✅, render ✅, QA ✅; `approval`/`publish` stages pending (plan-Phase 5) |
+| 2          | Research + fact-check with claim/evidence traceability           | research ✅, script ✅, scenes ✅; `fact_check` stage pending                                               |
+| 3          | Full long-form pipeline + media/license engine                   | pending                                                                                                     |
+| 4          | Shorts pipeline (9:16 re-render from scene graph)                | pending                                                                                                     |
+| 5          | Publishing (upload kit first, YouTube API after audit)           | pending                                                                                                     |
 
 **Delivered so far on this branch:** (a) the provider layer — six capability
 interfaces with a registry, a quota-aware `invoke()` pipeline, deterministic
@@ -246,7 +252,20 @@ anti-aliased canvas — no browser, no GPU, no downloads) and **FFmpeg**, with s
 resumable after a kill, artifacts reusable by content key, a render key that pins
 config + plan + audio + captions + fonts, output verified by reading the file back,
 and failures reported as coded errors plus a `render_failure` report in the CAS —
-[`docs/architecture/video-rendering.md`](docs/architecture/video-rendering.md).
+[`docs/architecture/video-rendering.md`](docs/architecture/video-rendering.md);
+and (l) the automated QA engine — `@nexus/qa`: five deterministic checks over the
+documents the earlier stages published — content (missing sections, unsupported
+claims, missing sources, contradictions), visual (missing assets, broken
+references, missing scenes, unreadable text, invalid layouts, measured as _ink_
+with the real fonts), audio (missing clips, duration mismatch, unexpected silence
+found by a prefix-sum RMS walk, invalid artifacts), video (invalid/corrupted
+output, wrong resolution or duration, encoding failures, dropped captions) and
+pipeline (invalid job state, missing artifacts, holes in the stage run) — assembled
+into one structured, versioned report whose `publishable` flag is computed, never
+authored, and enforced three ways (`assertPublishable`, the `qa` stage failing the
+job, reuse validation refusing blocked reports) so an episode that fails QA cannot
+reach approval or publishing —
+[`docs/architecture/qa-engine.md`](docs/architecture/qa-engine.md).
 These sit before plan-Phase 1 because every later step depends on typed
 artifacts and crash-resumable, non-duplicating jobs.
 
@@ -280,6 +299,15 @@ with instructions (`params.operatorAudio`) rather than shipping a silent scene.
 The `captions` stage needs no provider at all — it derives cues from the narration
 and the audio track the voice stage published, and the same track always produces
 the same subtitles.
+
+The `render` stage is provider-free too (`NEXUS_FFMPEG_PATH`/`NEXUS_RENDER_*` are
+its only knobs — see `docs/architecture/video-rendering.md`), and so is the stage
+after it: the `qa` stage reads what the earlier stages published, runs the five
+checks and stores the report — `NEXUS_QA_*` (thresholds: font sizes, tolerances,
+silence) is its whole configuration surface, and every value is hashed into the
+report so a verdict traces to the rules that produced it. A report with an error
+finding fails the stage: the episode stops before approval, with the reasons in the
+report artifact either way.
 
 The character system needs no provider either, and adds no configuration of its
 own: `CharacterLibrary.load({verifyAssets: true})` reads the bundled original cast

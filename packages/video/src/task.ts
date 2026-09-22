@@ -91,7 +91,9 @@ export function createRenderTask(deps: RenderTaskDeps): Task {
       const audioHash =
         upstreamHash(ctx, "voice", "trackHash") ?? namedParam(ctx, "audioTrackHash");
       const captionHash =
-        upstreamHash(ctx, "captions", "trackHash") ?? namedParam(ctx, "captionTrackHash");
+        upstreamHash(ctx, "captions", "captionHash") ??
+        upstreamHash(ctx, "captions", "trackHash") ??
+        namedParam(ctx, "captionTrackHash");
 
       let audioTrack;
       if (audioHash !== undefined) {
@@ -296,7 +298,8 @@ export function createRenderTask(deps: RenderTaskDeps): Task {
       if (audioHash !== undefined && metadata.audioTrackHash !== audioHash) {
         throw new PermanentError("the previous video was rendered with different narration audio");
       }
-      const captionHash = upstreamHash(ctx, "captions", "trackHash");
+      const captionHash =
+        upstreamHash(ctx, "captions", "captionHash") ?? upstreamHash(ctx, "captions", "trackHash");
       if (captionHash !== undefined && metadata.captionTrackHash !== captionHash) {
         throw new PermanentError("the previous video was rendered with different captions");
       }

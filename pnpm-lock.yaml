@@ -120,6 +120,49 @@ importers:
         specifier: ^3.25.0
         version: 3.25.76
 
+  packages/qa:
+    dependencies:
+      '@nexus/audio':
+        specifier: workspace:*
+        version: link:../audio
+      '@nexus/characters':
+        specifier: workspace:*
+        version: link:../characters
+      '@nexus/db':
+        specifier: workspace:*
+        version: link:../db
+      '@nexus/jobs':
+        specifier: workspace:*
+        version: link:../jobs
+      '@nexus/render':
+        specifier: workspace:*
+        version: link:../render
+      '@nexus/research':
+        specifier: workspace:*
+        version: link:../research
+      '@nexus/scenes':
+        specifier: workspace:*
+        version: link:../scenes
+      '@nexus/script':
+        specifier: workspace:*
+        version: link:../script
+      '@nexus/storage':
+        specifier: workspace:*
+        version: link:../storage
+      '@nexus/video':
+        specifier: workspace:*
+        version: link:../video
+      zod:
+        specifier: ^3.25.25
+        version: 3.25.76
+    devDependencies:
+      '@nexus/config':
+        specifier: workspace:*
+        version: link:../config
+      '@nexus/providers':
+        specifier: workspace:*
+        version: link:../providers
+
   packages/render:
     dependencies:
       '@nexus/characters':

@@ -23,6 +23,7 @@ export default defineConfig({
       "@nexus/audio": resolveFromRoot("./packages/audio/src/index.ts"),
       "@nexus/render": resolveFromRoot("./packages/render/src/index.ts"),
       "@nexus/video": resolveFromRoot("./packages/video/src/index.ts"),
+      "@nexus/qa": resolveFromRoot("./packages/qa/src/index.ts"),
     },
   },
   test: {

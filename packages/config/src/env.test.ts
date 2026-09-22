@@ -191,4 +191,41 @@ describe("loadEnv", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+  it("exposes the QA thresholds with their documented defaults", () => {
+    const config = loadEnv({ env: {} });
+
+    expect(config.qa).toEqual({
+      minFontPx: 18,
+      tightFontPx: 24,
+      durationToleranceSec: 0.5,
+      silenceRms: 0.006,
+      silenceWindowSec: 0.6,
+      videoToleranceSec: 0.25,
+      checkCaptionSafeArea: true,
+    });
+  });
+
+  it("takes the QA thresholds from the environment", () => {
+    const config = loadEnv({
+      env: {
+        NEXUS_QA_MIN_FONT_PX: "40",
+        NEXUS_QA_TIGHT_FONT_PX: "48",
+        NEXUS_QA_DURATION_TOLERANCE_SEC: "0.2",
+        NEXUS_QA_SILENCE_RMS: "0.002",
+        NEXUS_QA_SILENCE_WINDOW_SEC: "1.5",
+        NEXUS_QA_VIDEO_TOLERANCE_SEC: "0.5",
+        NEXUS_QA_CAPTION_SAFE_AREA: "off",
+      },
+    });
+
+    expect(config.qa).toEqual({
+      minFontPx: 40,
+      tightFontPx: 48,
+      durationToleranceSec: 0.2,
+      silenceRms: 0.002,
+      silenceWindowSec: 1.5,
+      videoToleranceSec: 0.5,
+      checkCaptionSafeArea: false,
+    });
+  });
 });

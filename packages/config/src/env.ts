@@ -85,6 +85,26 @@ export const envSchema = z.object({
   // directory, so a render never writes inside the repository.
   NEXUS_RENDER_WORK_DIR: z.string().default(""),
 
+  // ── Quality assurance (Phase 12) ───────────────────────────────────────
+  // What the QA stage is willing to publish. These are the knobs that differ
+  // between a strict channel and a smoke test, and every one of them is recorded
+  // in the report — hashed — so a verdict can always be traced back to the rules
+  // that produced it.
+  // Smallest type, in pixels of the output frame, that is still readable.
+  NEXUS_QA_MIN_FONT_PX: z.coerce.number().int().min(4).max(200).default(18),
+  // Below this, type is tight but not yet unreadable.
+  NEXUS_QA_TIGHT_FONT_PX: z.coerce.number().int().min(4).max(200).default(24),
+  // How far the finished narration may deviate from the plan, in seconds.
+  NEXUS_QA_DURATION_TOLERANCE_SEC: z.coerce.number().min(0).max(30).default(0.5),
+  // RMS below this is silence (0…1), and how long a silent stretch inside a
+  // spoken segment has to be before QA treats it as a hole in the narration.
+  NEXUS_QA_SILENCE_RMS: z.coerce.number().min(0).max(1).default(0.006),
+  NEXUS_QA_SILENCE_WINDOW_SEC: z.coerce.number().min(0.05).max(10).default(0.6),
+  // How far the rendered file may deviate from the render's own record.
+  NEXUS_QA_VIDEO_TOLERANCE_SEC: z.coerce.number().min(0).max(5).default(0.25),
+  // Check that burned-in captions stay inside the frame's safe area.
+  NEXUS_QA_CAPTION_SAFE_AREA: z.enum(["on", "off"]).default("on"),
+
   // ── Provider policy (AD-06/AD-13) ──────────────────────────────────────
   // Per-call deadline. Every provider call is bounded; a hung free tier must
   // not stall a stage.
@@ -161,6 +181,19 @@ export interface AppConfig {
     readonly segmentFrames: number;
     readonly threads: number;
     readonly workDir: string;
+  };
+  /**
+   * QA thresholds (Phase 12), shaped exactly like the QA engine's settings — an
+   * operator changes what counts as publishable without touching the engine.
+   */
+  readonly qa: {
+    readonly minFontPx: number;
+    readonly tightFontPx: number;
+    readonly durationToleranceSec: number;
+    readonly silenceRms: number;
+    readonly silenceWindowSec: number;
+    readonly videoToleranceSec: number;
+    readonly checkCaptionSafeArea: boolean;
   };
   /** Provider call policy: deadlines, retries, caching, budget degradation. */
   readonly providerPolicy: {
@@ -261,6 +294,15 @@ export function loadEnv(options: LoadEnvOptions = {}): AppConfig {
       segmentFrames: parsed.NEXUS_RENDER_SEGMENT_FRAMES,
       threads: parsed.NEXUS_RENDER_THREADS,
       workDir: parsed.NEXUS_RENDER_WORK_DIR,
+    },
+    qa: {
+      minFontPx: parsed.NEXUS_QA_MIN_FONT_PX,
+      tightFontPx: parsed.NEXUS_QA_TIGHT_FONT_PX,
+      durationToleranceSec: parsed.NEXUS_QA_DURATION_TOLERANCE_SEC,
+      silenceRms: parsed.NEXUS_QA_SILENCE_RMS,
+      silenceWindowSec: parsed.NEXUS_QA_SILENCE_WINDOW_SEC,
+      videoToleranceSec: parsed.NEXUS_QA_VIDEO_TOLERANCE_SEC,
+      checkCaptionSafeArea: parsed.NEXUS_QA_CAPTION_SAFE_AREA === "on",
     },
     providerPolicy: {
       timeoutMs: parsed.NEXUS_PROVIDER_TIMEOUT_MS,

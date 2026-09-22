@@ -1,0 +1,35 @@
+{
+  "name": "@nexus/qa",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The automated QA engine: deterministic checks over the script, the scene plan, the assets, the narration, the rendered video and the job's own state — producing one structured report that can stop an episode before it is published.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean"
+  },
+  "dependencies": {
+    "@nexus/audio": "workspace:*",
+    "@nexus/characters": "workspace:*",
+    "@nexus/db": "workspace:*",
+    "@nexus/jobs": "workspace:*",
+    "@nexus/render": "workspace:*",
+    "@nexus/research": "workspace:*",
+    "@nexus/scenes": "workspace:*",
+    "@nexus/script": "workspace:*",
+    "@nexus/storage": "workspace:*",
+    "@nexus/video": "workspace:*",
+    "zod": "^3.25.25"
+  },
+  "devDependencies": {
+    "@nexus/config": "workspace:*",
+    "@nexus/providers": "workspace:*"
+  }
+}
