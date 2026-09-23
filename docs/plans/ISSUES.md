@@ -248,6 +248,22 @@ Last updated: end of **Phase 12** (automated QA engine).
 | QA can BLOCK publication | 🟢 | `publishable = counts.errors === 0`; `assertPublishable` throws `QABlockedError`; the `qa` stage (after `render`, before `approval`) stores the report either way and then throws `PermanentError` when blocked — the job fails, the episode lands `FAILED`, approval/publish never run; `validateReuse` refuses blocked or stale QA results. Proven end to end by the e2e suite (a real render passes; an unsupported claim and a swapped video are refused). |
 | Tests: passing AND failing examples | 🟢 | 8 suites / 98 tests in `@nexus/qa`: every code exercised through at least one broken document, the clean fixture asserted first in every suite, plus `settings` (the `NEXUS_QA_*` contract) and a real-FFmpeg e2e suite (3 tests, real x264 render; skips loudly without a binary). Full verify: **76 files / 880 tests** (Phase 11: 68 / 780) with a real binary — `@nexus/qa` contributes 8 suites / 98 tests and `@nexus/config` 2 more (the QA thresholds). |
 
+## Phase 18 — security audit
+
+| ID | Status | Finding |
+|----|--------|---------|
+| SA-1 | 🔴→🟢 | **Cross-site request forgery on every dashboard action** (Phase 13): the state-changing form POSTs carried no origin verification; a hostile web page could drive the operator's browser to create episodes, start runs, approve gates and publish (reproduced: cross-origin POST created an episode). Fixed with an `onRequest` origin/host check on POSTs (`Origin: null` and mismatched hosts refused; same-origin, origin-less clients and Host-preserving proxies pass). Pinned by `tests/security/dashboard.test.ts` SA-1 (4 tests). |
+| SA-2 | 🟡→🟢 | **Artifact bytes served sniffable** (Phase 13): no `X-Content-Type-Options`, so outside content served by hash could be sniffed into HTML/script on the dashboard origin; no framing/referrer policy. Fixed: `nosniff` + `X-Frame-Options: DENY` + `Referrer-Policy: no-referrer` on every response; artifact content types already come from a fixed non-HTML map (pinned). `dashboard.test.ts` SA-2. |
+| SA-3 | 🟡→🟢 | **Unhandled errors leaked internal detail** (Phase 13): 500 pages rendered raw error messages (SQLite errors, absolute paths — reproduced). Fixed: 5xx pages are generic, the real cause goes to the server log; 4xx keeps operator-facing validation messages. `dashboard.test.ts` SA-3. |
+| SA-4 | 🟢 (documented) | No authentication / tenant model: single-operator localhost tool by contract (`dashboard.md`). Deploying beyond localhost requires an authenticating proxy; auth/tenancy is an architecture decision, not a patch. |
+| SA-5 | 🟢 (documented) | Publish-task approval check is episode-scoped, not fingerprint-scoped; the READY-state + route guards narrow the window, but binding publish approvals to content needs a design decision (what identity an approval binds). Recommended: `latestValidApproval` over the published artifact set. |
+| SA-6 | 🟢 (documented) | Dashboard approve sends no fingerprint (TOCTOU of seconds between view and click); `resolveGate` binding already makes changed content re-park. Acceptable single-operator; multi-operator review would carry the fingerprint in the form. |
+| SA-7 | 🟢 (documented) | OAuth custody is operator-side by design: standing refresh token via env name, access tokens memory-only, `neverLog` exact-value scrubbing (leak test), DB stores names only (pinned). |
+| SA-8 | 🟢 (documented) | SSRF: the pre-fetch guard refuses schemes, credentials, private/mapped/octal literals (15 pinned cases); a real fetcher must add resolve-then-recheck (DNS rebinding). No shipped adapter fetches research URLs today. |
+| SA-9 | 🟢 (documented) | 4xx messages are operator-facing by design; all user/content text escapes through one helper (pinned). Residual consideration is information freshness, not injection. |
+| Held & pinned | 🟢 | Parameterized SQL (hostile-string probe), command execution boundary (spawnSync array, never a shell), fixed content-type map, gate/publish refusals, idempotency dedup, claim exclusivity. |
+| Tests | 🟢 | New `tests/security/` (2 files, 33 tests). Full suite **86 files / 998 tests** (+3 skipped), format/lint/tsc clean. Report: `docs/testing/security-audit.md`. |
+
 ## Phase 17 — reliability pass (hostile)
 
 | ID | Status | Finding |

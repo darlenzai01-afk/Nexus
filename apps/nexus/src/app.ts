@@ -219,6 +219,59 @@ export async function buildApp(
     done(null, new URLSearchParams(String(body)));
   });
 
+  // ── Cross-site request guard (the dashboard's CSRF defence) ─────────────
+  // Every state change is a form POST, and the dashboard holds no tokens an
+  // attacker could not ride in the operator's browser. Browsers attach an
+  // `Origin` header to cross-site POSTs and cannot forge it from a form, so a
+  // POST whose origin does not name THIS dashboard's host is refused before
+  // any handler runs. `Origin: null` (sandboxed frames, some cross-site
+  // redirects) names nothing and is refused too. Same-origin POSTs
+  // (Origin === Host), non-browser clients (no Origin header: curl, the
+  // worker, tests) and reverse proxies that preserve the Host header pass.
+  app.addHook("onRequest", (request, reply, done) => {
+    if (request.method === "POST") {
+      const origin = request.headers.origin;
+      let refused = false;
+      if (typeof origin === "string" && origin !== "") {
+        if (origin === "null") {
+          refused = true;
+        } else {
+          let originHost: string | undefined;
+          try {
+            originHost = new URL(origin).host;
+          } catch {
+            originHost = undefined;
+          }
+          refused = originHost === undefined || originHost !== request.headers.host;
+        }
+      }
+      if (refused) {
+        request.log.warn({ origin, host: request.headers.host }, "cross-site POST refused");
+        void reply
+          .status(403)
+          .type("text/html")
+          .send(
+            errorPage(
+              403,
+              "Cross-site request refused: the form's origin does not match this dashboard. Use the dashboard itself.",
+            ),
+          );
+        return;
+      }
+    }
+    done();
+  });
+
+  // ── Response hardening headers ──────────────────────────────────────────
+  // `nosniff` stops a browser from re-interpreting artifact bytes (documents
+  // are operator/research content, served by hash) as HTML or script;
+  // framing and referrer policy close clickjacking and referrer leaks.
+  app.addHook("onSend", async (_request, reply) => {
+    reply.header("x-content-type-options", "nosniff");
+    reply.header("x-frame-options", "DENY");
+    reply.header("referrer-policy", "no-referrer");
+  });
+
   app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
     if (error instanceof NotFoundError || error.statusCode === 404) {
       void reply.status(404).type("text/html").send(errorPage(404, "That page does not exist."));
@@ -228,11 +281,18 @@ export async function buildApp(
       error instanceof ValidationError || error instanceof Error
         ? error.message
         : "unexpected error";
+    // The real cause goes to the server log; the page shows operator-facing
+    // detail only for 4xx (validation, not-found). A 5xx message can carry
+    // infrastructure detail (paths, SQL, addresses) that a browser page has
+    // no business displaying.
     request.log.error({ err: message }, "request failed");
-    void reply
-      .status(error.statusCode !== undefined && error.statusCode >= 400 ? error.statusCode : 500)
-      .type("text/html")
-      .send(errorPage(500, message.slice(0, 500)));
+    const status =
+      error.statusCode !== undefined && error.statusCode >= 400 ? error.statusCode : 500;
+    const pageMessage =
+      status >= 500
+        ? "Something went wrong on the server. The detail is in the server log."
+        : message.slice(0, 500);
+    void reply.status(status).type("text/html").send(errorPage(status, pageMessage));
   });
 
   const redirectToEpisode = (
