@@ -1,7 +1,7 @@
 import type { ApprovalRow, Repo } from "@nexus/db";
 
 import { ConfigurationError } from "./errors.js";
-import { assertJobTransition } from "./machines.js";
+import { assertEpisodeTransition, assertJobTransition, episodePathTo } from "./machines.js";
 import { requirePipeline } from "./stages.js";
 
 /**
@@ -120,6 +120,28 @@ export function resolveGate(repo: Repo, jobId: string, input: ResolveGateInput):
       .listJobSteps(jobId)
       .filter((step) => step.state === "PENDING")
       .map((step) => step.step_key);
+
+    // The episode follows the job backwards, through the machine's designed
+    // re-entry state: <gate state> → NEEDS_CHANGES → the target stage's own
+    // start state. The runner never moves the episode backwards on its own
+    // (it logs `episode.transition.rejected` instead), so the operator's
+    // rewind is the one place this is correct — and required: a rewound run
+    // re-enters early stages while QA's consistency check watches, and an
+    // episode still parked at the gate would fail that check and turn the
+    // operator's rewind into a spurious failure.
+    const targetStage = pipeline.stages.find((stage) => stage.key === target);
+    if (targetStage !== undefined) {
+      const episode = repo.requireEpisode(repo.requireJob(jobId).episode_id);
+      for (const step of episodePathTo(
+        episode.kind,
+        episode.state,
+        targetStage.episodeStateOnStart,
+      )) {
+        assertEpisodeTransition(episode.kind, repo.requireEpisode(episode.id).state, step);
+        repo.setEpisodeState(episode.id, step);
+      }
+    }
+
     repo.logJob({
       jobId,
       stepKey: waitingStep.step_key,
@@ -140,8 +162,10 @@ export function resolveGate(repo: Repo, jobId: string, input: ResolveGateInput):
 
   assertJobTransition(repo.requireJob(jobId).state, "PENDING");
   // The operator's decision must be claimable immediately: a stale backoff
-  // window from the failed attempts would silently delay the rewind.
-  repo.setJobState(jobId, "PENDING", { resetRetry: true });
+  // window from the failed attempts would silently delay the rewind — and the
+  // attempt budget starts over, because the ceiling bounds automatic failure
+  // retries, not healthy operator-driven completions.
+  repo.setJobState(jobId, "PENDING", { resetRetry: true, resetAttempts: true });
   return {
     jobId,
     gate,

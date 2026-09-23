@@ -883,7 +883,12 @@ export class Repo {
   setJobState(
     id: string,
     state: JobState,
-    options: { error?: string | null; gate?: string | null; resetRetry?: boolean } = {},
+    options: {
+      error?: string | null;
+      gate?: string | null;
+      resetRetry?: boolean;
+      resetAttempts?: boolean;
+    } = {},
   ): PipelineJobRow {
     this.requireJob(id);
     const next = validate(JobStateSchema, state, "job state");
@@ -895,10 +900,16 @@ export class Repo {
     // stale backoff window happens to elapse.
     const retryColumn =
       next === "PENDING" && options.resetRetry !== true ? "next_attempt_at" : "NULL";
+    // The attempt counter bounds AUTOMATIC retry loops after failure. An
+    // operator gate decision (approve a parked run, rewind for changes) is a
+    // fresh human decision, not a retry — `resetAttempts` starts the budget
+    // over so multi-gate pipelines and reworks cannot exhaust it by healthy
+    // use. Failure-driven retries never pass this flag.
+    const attemptsColumn = options.resetAttempts === true ? "0" : "attempt";
     this.db.run(
       `UPDATE pipeline_jobs
           SET state = ?, waiting_gate = ?, error = ?, updated_at = ?,
-              next_attempt_at = ${retryColumn}
+              next_attempt_at = ${retryColumn}, attempt = ${attemptsColumn}
               ${clearLease ? ", lease_owner = NULL, lease_expires_at = NULL" : ""}
         WHERE id = ?;`,
       [next, options.gate ?? null, options.error ?? null, nowIso(), id],

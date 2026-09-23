@@ -132,6 +132,47 @@ export const canTransitionEpisode = (
   to: EpisodeState,
 ): boolean => from === to || (episodeTransitions(kind)[from] ?? []).includes(to);
 
+/**
+ * The shortest legal episode path from `from` to `to`, walking only edges the
+ * state machine itself declares (BFS over the transition table).
+ *
+ * Used by operator rewinds: a parked run's episode state must follow the job
+ * backwards to the rewind target, and the direct jump is not always legal
+ * (e.g. FACT_CHECKING must pass through FACT_REVIEW to reach NEEDS_CHANGES).
+ * Throws when no path exists — the rewind is refused rather than the episode
+ * being forced into an illegal state.
+ */
+export function episodePathTo(
+  kind: EpisodeKind,
+  from: EpisodeState,
+  to: EpisodeState,
+): readonly EpisodeState[] {
+  if (from === to) return [];
+  const table = episodeTransitions(kind);
+  const visited = new Set<EpisodeState>([from]);
+  let frontier: readonly (readonly EpisodeState[])[] = [[from]];
+  while (frontier.length > 0) {
+    const nextFrontier: (readonly EpisodeState[])[] = [];
+    for (const path of frontier) {
+      const last = path[path.length - 1]!;
+      for (const next of table[last] ?? []) {
+        if (next === to) return [...path, next];
+        if (!visited.has(next)) {
+          visited.add(next);
+          nextFrontier.push([...path, next]);
+        }
+      }
+    }
+    frontier = nextFrontier;
+  }
+  throw new InvalidTransitionError(
+    `episode (${kind}) — no legal path`,
+    from,
+    to,
+    table[from] ?? [],
+  );
+}
+
 export function assertEpisodeTransition(
   kind: EpisodeKind,
   from: EpisodeState,
