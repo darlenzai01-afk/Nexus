@@ -1,0 +1,16 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "integration",
+    "outDir": "dist"
+  },
+  "include": ["integration"],
+  "references": [
+    { "path": "../packages/config" },
+    { "path": "../packages/db" },
+    { "path": "../packages/storage" },
+    { "path": "../packages/jobs" },
+    { "path": "../apps/nexus" }
+  ]
+}

@@ -1,0 +1,117 @@
+import { createHash } from "node:crypto";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import path from "node:path";
+
+export interface PutResult {
+  readonly hash: string;
+  readonly path: string;
+  readonly bytes: number;
+  readonly created: boolean;
+}
+
+/** Storage interface (discovery §8) — the CAS contract a cloud backend must satisfy. */
+export interface BlobStore {
+  put(data: Uint8Array): PutResult;
+  putFromFile(filePath: string): PutResult;
+  has(hash: string): boolean;
+  getPath(hash: string): string | undefined;
+  read(hash: string): Uint8Array;
+}
+
+export function sha256(data: Uint8Array): string {
+  return createHash("sha256").update(data).digest("hex");
+}
+
+/**
+ * Local content-addressed store: `<root>/<hash[0..2]>/<hash>`.
+ * Dedupe and integrity come free (AD-09). Writes go through a temp file +
+ * rename so partially-written blobs are never visible under their hash.
+ */
+/** Artifact addresses are sha-256 hex — anything else is not a hash. */
+function isArtifactHash(hash: string): boolean {
+  return /^[0-9a-f]{64}$/u.test(hash);
+}
+
+export class CasStore implements BlobStore {
+  constructor(private readonly root: string) {
+    mkdirSync(root, { recursive: true });
+  }
+
+  pathFor(hash: string): string {
+    // Every caller reaches the disk through here, so this is the one place a
+    // malformed "hash" could escape the store (path traversal) or read another
+    // shard. Artifact hashes are sha-256 hex, always.
+    if (!/^[0-9a-f]{64}$/u.test(hash)) {
+      throw new Error(`CAS: "${hash.slice(0, 24)}" is not a sha-256 artifact hash`);
+    }
+    return path.join(this.root, hash.slice(0, 2), hash);
+  }
+
+  put(data: Uint8Array): PutResult {
+    const hash = sha256(data);
+    const finalPath = this.pathFor(hash);
+    if (existsSync(finalPath)) {
+      return { hash, path: finalPath, bytes: statSync(finalPath).size, created: false };
+    }
+    mkdirSync(path.dirname(finalPath), { recursive: true });
+    const tmpPath = `${finalPath}.tmp-${process.pid}-${Date.now()}`;
+    writeFileSync(tmpPath, data);
+    renameSync(tmpPath, finalPath);
+    return { hash, path: finalPath, bytes: data.byteLength, created: true };
+  }
+
+  putFromFile(filePath: string): PutResult {
+    return this.put(readFileSync(filePath));
+  }
+
+  has(hash: string): boolean {
+    if (!isArtifactHash(hash)) return false;
+    return existsSync(this.pathFor(hash));
+  }
+
+  getPath(hash: string): string | undefined {
+    if (!isArtifactHash(hash)) return undefined;
+    const p = this.pathFor(hash);
+    return existsSync(p) ? p : undefined;
+  }
+
+  read(hash: string): Uint8Array {
+    const p = this.getPath(hash);
+    if (!p) throw new Error(`CAS: blob not found for hash ${hash.slice(0, 24)}`);
+    return readFileSync(p);
+  }
+
+  /**
+   * Every blob hash in the store. Intended for integrity audits and for the
+   * (not yet implemented) garbage collector that reconciles stored blobs
+   * against the `artifacts` table — see GAP-7 in docs/plans/ISSUES.md.
+   */
+  list(): string[] {
+    const hashes: string[] = [];
+    for (const shard of readdirSync(this.root, { withFileTypes: true })) {
+      if (!shard.isDirectory() || !/^[0-9a-f]{2}$/.test(shard.name)) continue;
+      for (const entry of readdirSync(path.join(this.root, shard.name))) {
+        if (/^[0-9a-f]{64}$/.test(entry)) hashes.push(entry);
+      }
+    }
+    return hashes.sort();
+  }
+
+  /** Copy a blob out of the store to an arbitrary destination path. */
+  export(hash: string, destPath: string): string {
+    const p = this.getPath(hash);
+    if (!p) throw new Error(`CAS: blob not found for hash ${hash}`);
+    mkdirSync(path.dirname(destPath), { recursive: true });
+    copyFileSync(p, destPath);
+    return destPath;
+  }
+}

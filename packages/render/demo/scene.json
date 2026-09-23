@@ -1,0 +1,227 @@
+{
+  "version": 1,
+  "topic": "Nexus Forge composition engine — demonstration scene",
+  "workingTitle": "One Scene, Every Layer",
+  "scriptId": "",
+  "scriptHash": "5ebf0aca71cde8032137775e641b2b2efa9dfb64b33201e54d86f646f44d7f0d",
+  "generatedAt": "2026-09-22T00:00:00.000Z",
+  "fps": 30,
+  "aspect": "16:9",
+  "resolution": { "width": 1920, "height": 1080 },
+  "wordsPerSecond": 2.5,
+  "totalDurationSec": 11.5,
+  "cast": [
+    {
+      "id": "maya",
+      "name": "Maya Okonkwo",
+      "role": "host",
+      "description": "Studio host: explains the system on camera, sleeves rolled up.",
+      "definition": {
+        "characterId": "maya",
+        "version": 1,
+        "hash": "10a9e6c468b82c66910715528c1ecbf2a9257916933751744f4d04b3cf2f4b8e"
+      }
+    },
+    {
+      "id": "tomas",
+      "name": "Tomás Reyes",
+      "role": "narrator",
+      "description": "Field narrator: walks the site, reports what is there.",
+      "definition": {
+        "characterId": "tomas",
+        "version": 1,
+        "hash": "3bc5be1c9e2ef8f663b0b026b15c1c69eaa71924b60b9e1da6cc30cc4559a547"
+      }
+    }
+  ],
+  "scenes": [
+    {
+      "id": "scn_demo_composite",
+      "index": 0,
+      "type": "HYBRID",
+      "sectionId": "sec_demo",
+      "role": "narrative",
+      "startSec": 0,
+      "durationSec": 11.5,
+      "narration": {
+        "kind": "sentence",
+        "text": "This demonstration scene exists to prove the composition engine end to end: two characters, on-screen text, a moving camera, a performance change and a transition out.",
+        "sectionId": "sec_demo",
+        "role": "narrative",
+        "sentenceIds": ["snt_demo_1"],
+        "words": 26,
+        "estimatedDurationSec": 10.4
+      },
+      "characters": [
+        { "characterId": "maya", "state": "talking" },
+        { "characterId": "tomas", "state": "listening" }
+      ],
+      "media": {
+        "kind": "generated",
+        "description": "A synthetic backdrop plate behind the two presenters. No footage was searched for or implied.",
+        "searchHint": "",
+        "orientation": "landscape",
+        "treatment": "overlay",
+        "assets": ["demo_plate"]
+      },
+      "text": {
+        "kind": "number",
+        "value": "{n} frames composited from one manifest",
+        "attribution": "Synthetic demonstration scene — engine output, not a research claim",
+        "position": "lower_third",
+        "maxLines": 2
+      },
+      "camera": {
+        "shot": "medium_close",
+        "movement": "dolly_in",
+        "angle": "eye_level",
+        "focus": "presenter"
+      },
+      "animation": [
+        {
+          "id": "a_fade_in",
+          "atSec": 0,
+          "durationSec": 0.6,
+          "kind": "fade_in",
+          "target": "scene",
+          "targetId": "",
+          "params": {}
+        },
+        {
+          "id": "a_slide_in",
+          "atSec": 0.3,
+          "durationSec": 0.8,
+          "kind": "slide_in",
+          "target": "character",
+          "targetId": "maya",
+          "params": { "from": "left" }
+        },
+        {
+          "id": "a_lower_third",
+          "atSec": 0.9,
+          "durationSec": 0.5,
+          "kind": "lower_third",
+          "target": "text",
+          "targetId": "",
+          "params": {}
+        },
+        {
+          "id": "a_type_on",
+          "atSec": 1.1,
+          "durationSec": 1.2,
+          "kind": "type_on",
+          "target": "text",
+          "targetId": "",
+          "params": {}
+        },
+        {
+          "id": "a_wipe_in",
+          "atSec": 1.2,
+          "durationSec": 0.7,
+          "kind": "wipe_in",
+          "target": "media",
+          "targetId": "demo_plate",
+          "params": {}
+        },
+        {
+          "id": "a_count_up",
+          "atSec": 1.6,
+          "durationSec": 2,
+          "kind": "count_up",
+          "target": "text",
+          "targetId": "",
+          "params": { "from": 0, "to": 345, "decimals": 0 }
+        },
+        {
+          "id": "a_callout",
+          "atSec": 4.2,
+          "durationSec": 0.6,
+          "kind": "callout",
+          "target": "text",
+          "targetId": "",
+          "params": {}
+        },
+        {
+          "id": "a_pose_change",
+          "atSec": 4.8,
+          "durationSec": 0.5,
+          "kind": "pose_change",
+          "target": "character",
+          "targetId": "maya",
+          "params": { "pose": "walk" }
+        },
+        {
+          "id": "a_pulse",
+          "atSec": 5.6,
+          "durationSec": 0.6,
+          "kind": "pulse",
+          "target": "text",
+          "targetId": "",
+          "params": { "amount": 0.03 }
+        },
+        {
+          "id": "a_expression_change",
+          "atSec": 6.4,
+          "durationSec": 0.5,
+          "kind": "expression_change",
+          "target": "character",
+          "targetId": "tomas",
+          "params": { "expression": "surprised" }
+        },
+        {
+          "id": "a_rotate",
+          "atSec": 7.4,
+          "durationSec": 0.5,
+          "kind": "rotate",
+          "target": "text",
+          "targetId": "",
+          "params": { "from": -1.6, "to": 0 }
+        },
+        {
+          "id": "a_zoom_to",
+          "atSec": 8.6,
+          "durationSec": 1.2,
+          "kind": "zoom_to",
+          "target": "scene",
+          "targetId": "",
+          "params": { "scale": 1.06 }
+        }
+      ],
+      "transition": {
+        "kind": "fade_to_black",
+        "durationSec": 0.8,
+        "toSceneId": "",
+        "audio": "crossfade"
+      },
+      "sources": [],
+      "sourceIds": [],
+      "notes": [
+        "Hand-written demonstration manifest: the scene planner did not produce it, and no script backs its scriptHash.",
+        "Narration and on-screen text are synthetic. This scene proves the engine; it does not state a fact about the world."
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "id": "demo_plate",
+      "sceneId": "scn_demo_composite",
+      "kind": "generated",
+      "purpose": "texture",
+      "description": "Synthetic backdrop plate for the demonstration composite; the media stage would fill its uri.",
+      "searchHint": "",
+      "orientation": "landscape",
+      "minDurationSec": 3,
+      "status": "planned",
+      "uri": "",
+      "licence": "generated"
+    }
+  ],
+  "warnings": [],
+  "provenance": {
+    "engine": { "name": "nexus-render-demo", "version": "1.0.0" },
+    "steps": [],
+    "aiSteps": [],
+    "deterministicSteps": [],
+    "generatedAt": "2026-09-22T00:00:00.000Z"
+  }
+}

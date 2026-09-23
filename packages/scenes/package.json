@@ -1,0 +1,26 @@
+{
+  "name": "@nexus/scenes",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Scene planning: turns a validated script into a structured scene manifest (CHARACTER / EVIDENCE / HYBRID / DIAGRAM / ENVIRONMENT / TRANSITION scenes) with durations, narration references, characters and states, media and asset inventory, on-screen text, diagrams, camera, animation events, transitions and source references — plus the strict schemas and the validator every downstream system reads it through.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean"
+  },
+  "dependencies": {
+    "@nexus/db": "workspace:*",
+    "@nexus/jobs": "workspace:*",
+    "@nexus/providers": "workspace:*",
+    "@nexus/script": "workspace:*",
+    "@nexus/storage": "workspace:*",
+    "zod": "^3.25.25"
+  }
+}

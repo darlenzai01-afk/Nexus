@@ -1,0 +1,34 @@
+{
+  "name": "@nexus/app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Nexus Forge application: the dashboard/API host and the pipeline worker (two entrypoints, one codebase \u2014 AD-01).",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean"
+  },
+  "dependencies": {
+    "@nexus/audio": "workspace:*",
+    "@nexus/characters": "workspace:*",
+    "@nexus/config": "workspace:*",
+    "@nexus/db": "workspace:*",
+    "@nexus/jobs": "workspace:*",
+    "@nexus/providers": "workspace:*",
+    "@nexus/qa": "workspace:*",
+    "@nexus/research": "workspace:*",
+    "@nexus/scenes": "workspace:*",
+    "@nexus/script": "workspace:*",
+    "@nexus/shorts": "workspace:*",
+    "@nexus/storage": "workspace:*",
+    "@nexus/video": "workspace:*",
+    "fastify": "^5.0.0"
+  }
+}

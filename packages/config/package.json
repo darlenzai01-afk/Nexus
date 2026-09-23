@@ -1,0 +1,22 @@
+{
+  "name": "@nexus/config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared, schema-validated environment configuration for Nexus Forge (AD-13: every knob is explicit and defaulted).",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "zod": "^3.25.0"
+  }
+}

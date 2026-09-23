@@ -1,0 +1,381 @@
+{
+  "version": 1,
+  "id": "maya",
+  "identity": {
+    "name": "Maya Okonkwo",
+    "shortName": "Maya",
+    "pronoun": "she/her",
+    "description": "The channel's studio host: a working engineer who explains systems on camera, sleeves rolled up, chalk-quiet and precise.",
+    "traits": ["curious", "precise", "dry humour"]
+  },
+  "role": "host",
+  "visual": {
+    "canvas": { "width": 512, "height": 1024 },
+    "anchor": { "x": 0.5, "y": 1 },
+    "proportions": {
+      "headRadius": 66,
+      "shoulderWidth": 188,
+      "torsoLength": 236,
+      "armLength": 232,
+      "legLength": 348,
+      "limbWidth": 40
+    },
+    "palette": {
+      "skin": "#8a5a3b",
+      "hair": "#1b1418",
+      "primary": "#1f6f6a",
+      "secondary": "#2b3440",
+      "accent": "#e0a33c",
+      "ink": "#141a1f",
+      "backdrop": "#e7e2d8"
+    },
+    "hair": { "style": "curly", "colourKey": "hair" }
+  },
+  "defaultPerformance": {
+    "pose": "stand",
+    "expression": "neutral",
+    "gesture": "open_palms",
+    "clothing": ["studio"],
+    "accessories": ["studio_badge"]
+  },
+  "poses": [
+    {
+      "id": "stand",
+      "name": "Standing",
+      "description": "Weight settled, feet apart — the resting stance.",
+      "contexts": [],
+      "assets": ["maya_pose_stand_body", "maya_pose_stand_arms"]
+    },
+    {
+      "id": "walk",
+      "name": "Walking",
+      "description": "Mid-stride, moving into or out of the frame.",
+      "contexts": ["field"],
+      "assets": ["maya_pose_walk_body", "maya_pose_walk_arms"]
+    },
+    {
+      "id": "talk",
+      "name": "Talking",
+      "description": "Turned slightly to camera with the arms brought in towards the chest.",
+      "contexts": ["studio"],
+      "assets": ["maya_pose_talk_body", "maya_pose_talk_arms"]
+    }
+  ],
+  "expressions": [
+    {
+      "id": "neutral",
+      "name": "Neutral",
+      "description": "Relaxed face, no particular feeling.",
+      "contexts": [],
+      "assets": ["maya_expr_neutral"]
+    },
+    {
+      "id": "explaining",
+      "name": "Explaining",
+      "description": "Brows up, mouth open — mid-sentence.",
+      "contexts": ["studio"],
+      "assets": ["maya_expr_explaining"]
+    },
+    {
+      "id": "engaged",
+      "name": "Engaged",
+      "description": "A slight smile, listening or agreeing.",
+      "contexts": [],
+      "assets": ["maya_expr_engaged"]
+    },
+    {
+      "id": "surprised",
+      "name": "Surprised",
+      "description": "Wide eyes, small mouth — a reversal in the story.",
+      "contexts": [],
+      "assets": ["maya_expr_surprised"]
+    }
+  ],
+  "gestures": [
+    {
+      "id": "open_palms",
+      "name": "Open palms",
+      "description": "Both hands open, holding out a slate — 'here is how it works'.",
+      "contexts": ["studio"],
+      "assets": ["maya_gesture_open_palms_arms", "maya_gesture_open_palms_prop"]
+    },
+    {
+      "id": "point",
+      "name": "Point",
+      "description": "Right arm extended with a pointer — indicating something off-frame.",
+      "contexts": ["field"],
+      "assets": ["maya_gesture_point_arms", "maya_gesture_point_prop"]
+    }
+  ],
+  "clothing": [
+    {
+      "id": "studio",
+      "name": "Studio jacket",
+      "description": "Charcoal jacket over the house colours, lanyard pocket.",
+      "contexts": ["studio"],
+      "assets": ["maya_cloth_studio"]
+    },
+    {
+      "id": "field",
+      "name": "Field vest",
+      "description": "Utility vest with webbing straps and deep pockets.",
+      "contexts": ["field"],
+      "assets": ["maya_cloth_field"]
+    }
+  ],
+  "accessories": [
+    {
+      "id": "studio_badge",
+      "name": "Studio badge",
+      "description": "Access badge on a lanyard.",
+      "contexts": ["studio"],
+      "assets": ["maya_acc_studio_badge"]
+    },
+    {
+      "id": "field_bag",
+      "name": "Camera bag",
+      "description": "Crossbody camera bag on a wide strap.",
+      "contexts": ["field"],
+      "assets": ["maya_acc_field_bag"]
+    }
+  ],
+  "assets": [
+    {
+      "id": "maya_plate",
+      "slot": "base",
+      "paints": "plate",
+      "path": "assets/maya/maya_plate.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "ba2738a2485eefaed869b0cbed980c9cb4a9ad9172a33373a52f8fe020c89562",
+      "bytes": 298,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "maya_pose_stand_body",
+      "slot": "pose",
+      "paints": "body",
+      "path": "assets/maya/maya_pose_stand_body.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "07d87d4af3a67409dea6958081b6a5cff15c7c0cfab40fd795010e9f683ce285",
+      "bytes": 870,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "maya_pose_stand_arms",
+      "slot": "pose",
+      "paints": "arms",
+      "path": "assets/maya/maya_pose_stand_arms.svg",
+      "kind": "svg",
+      "order": 1,
+      "hash": "c060a8523a3db1ddedc04a16fb8a225ff6d73dc635c7decab93e401f0e05ed54",
+      "bytes": 324,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "maya_pose_walk_body",
+      "slot": "pose",
+      "paints": "body",
+      "path": "assets/maya/maya_pose_walk_body.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "e697a4b0ce558c78b0e3c6d8668cb4a07994b680ddb30efa2d08f084cffce3ea",
+      "bytes": 870,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "maya_pose_walk_arms",
+      "slot": "pose",
+      "paints": "arms",
+      "path": "assets/maya/maya_pose_walk_arms.svg",
+      "kind": "svg",
+      "order": 1,
+      "hash": "2fdefc9cf9690bf50a12c750704d688195277a4407db8df0772d90349f5ec8c7",
+      "bytes": 320,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "maya_pose_talk_body",
+      "slot": "pose",
+      "paints": "body",
+      "path": "assets/maya/maya_pose_talk_body.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "26a3cbfa993bb8592afd44f6059cd128841ebe29c47626b481194162e6c8aff5",
+      "bytes": 870,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "maya_pose_talk_arms",
+      "slot": "pose",
+      "paints": "arms",
+      "path": "assets/maya/maya_pose_talk_arms.svg",
+      "kind": "svg",
+      "order": 1,
+      "hash": "a4a6767556b1d45f1607cbc21c29e87b2db8e4287d362f7fe6c9ca06d8be438e",
+      "bytes": 316,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "maya_expr_neutral",
+      "slot": "expression",
+      "paints": "face",
+      "path": "assets/maya/maya_expr_neutral.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "a29db88d563c75801a031bfd3bbaaf1a80f8fc914986261ed83aa2c68fc70453",
+      "bytes": 316,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "maya_expr_explaining",
+      "slot": "expression",
+      "paints": "face",
+      "path": "assets/maya/maya_expr_explaining.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "a3b982534aaa5b4044d52ad5e29b76af55850b3e17ab6e237fc1438f56d9708b",
+      "bytes": 478,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "maya_expr_engaged",
+      "slot": "expression",
+      "paints": "face",
+      "path": "assets/maya/maya_expr_engaged.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "b84069135fe1dd55d89b244c73f384ba5810330de3cf9781a9fc44a97438286f",
+      "bytes": 324,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "maya_expr_surprised",
+      "slot": "expression",
+      "paints": "face",
+      "path": "assets/maya/maya_expr_surprised.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "732d92e35ab7c83eef0426375b540500e53e4f9461e8de5fe23caaf58ac3239e",
+      "bytes": 460,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "maya_gesture_open_palms_arms",
+      "slot": "gesture",
+      "paints": "arms",
+      "path": "assets/maya/maya_gesture_open_palms_arms.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "90cbadb2f4f116afb0433ebadbcae76952cbe681d6bc5a11b5c9247d34847099",
+      "bytes": 316,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "maya_gesture_open_palms_prop",
+      "slot": "gesture",
+      "paints": "prop",
+      "path": "assets/maya/maya_gesture_open_palms_prop.svg",
+      "kind": "svg",
+      "order": 1,
+      "hash": "ce1e96fa6ab4ce474cb03da6b18edcb950ecdbc6ee04bf255fb0667546a25b62",
+      "bytes": 357,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "maya_gesture_point_arms",
+      "slot": "gesture",
+      "paints": "arms",
+      "path": "assets/maya/maya_gesture_point_arms.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "c6e1ca35b88969bcfbf26e4c7c18ba50c4f2e7809408e69f2ce6862df4371da2",
+      "bytes": 320,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "maya_gesture_point_prop",
+      "slot": "gesture",
+      "paints": "prop",
+      "path": "assets/maya/maya_gesture_point_prop.svg",
+      "kind": "svg",
+      "order": 1,
+      "hash": "8bf95fb67c76e6fd2be46cb6266cb940fc6657f25eef592e8d07f42f0ab4a814",
+      "bytes": 246,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "maya_cloth_studio",
+      "slot": "clothing",
+      "paints": "torso",
+      "path": "assets/maya/maya_cloth_studio.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "6016e1235665ae1c9fbd65a12451082c9d21f1cd7de2ee3b42416bfb3daa1c15",
+      "bytes": 613,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "maya_cloth_field",
+      "slot": "clothing",
+      "paints": "torso",
+      "path": "assets/maya/maya_cloth_field.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "bb1d789b1e3e83da99b3e228a5e910e8f77d35dc4df4e1ab80fd44928aba11ee",
+      "bytes": 793,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "maya_acc_studio_badge",
+      "slot": "accessory",
+      "paints": "worn",
+      "path": "assets/maya/maya_acc_studio_badge.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "2373757d1e7b16e175020dd4487638bb004b00131e35de81bbbf833e6aead92b",
+      "bytes": 287,
+      "width": 512,
+      "height": 1024
+    },
+    {
+      "id": "maya_acc_field_bag",
+      "slot": "accessory",
+      "paints": "worn",
+      "path": "assets/maya/maya_acc_field_bag.svg",
+      "kind": "svg",
+      "order": 0,
+      "hash": "e5efc76a12a2fb3ccf092a554d8050136b4cfe9127be99722a55e9467b3146c9",
+      "bytes": 279,
+      "width": 512,
+      "height": 1024
+    }
+  ],
+  "provenance": {
+    "origin": "generated",
+    "generator": "packages/characters/tools/build-demo-set.mjs",
+    "note": "Flat-shape demonstration art: one SVG per layer, generated deterministically from the proportions in this definition."
+  },
+  "licence": {
+    "kind": "original",
+    "note": "Original character created for the Nexus Forge demonstration set. Not modelled on, named after, or styled after any existing person or channel."
+  }
+}

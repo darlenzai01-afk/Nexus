@@ -1,0 +1,18 @@
+{
+  "name": "@nexus/storage",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Content-addressed artifact store (sha256 keys) — AD-09. Local FS implementation behind a swappable interface (S3/R2 later).",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean"
+  }
+}

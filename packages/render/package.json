@@ -1,0 +1,23 @@
+{
+  "name": "@nexus/render",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Reusable animation and composition engine: a validated scene manifest plus the character library become deterministic frames (position, scale, rotation, opacity, pose, expression, text, camera movement and transitions), and those frames become SVG.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "clean": "tsc -b tsconfig.json --clean"
+  },
+  "dependencies": {
+    "@nexus/characters": "workspace:*",
+    "@nexus/scenes": "workspace:*",
+    "@nexus/storage": "workspace:*"
+  }
+}
