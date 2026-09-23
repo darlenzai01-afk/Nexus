@@ -15,6 +15,7 @@ import {
   PUBLISH_RECORD_ROLE,
   type PublishRequest,
 } from "./pipeline.js";
+import { SHORTS_DASHBOARD_PIPELINE, SHORTS_DASHBOARD_STEPS } from "./shorts-pipeline.js";
 import {
   artifactsPage,
   episodePage,
@@ -341,18 +342,54 @@ export async function buildApp(
         });
         return;
       }
+      // A short episode runs the shorts graph (transcript → candidates →
+      // script → 9:16 layout → render → QA → SHORT_APPROVAL); a long episode
+      // runs the dashboard long-form graph. Publishing is in neither.
+      const pipeline = episode.kind === "short" ? SHORTS_DASHBOARD_PIPELINE : DASHBOARD_PIPELINE;
+      const steps = episode.kind === "short" ? SHORTS_DASHBOARD_STEPS : DASHBOARD_STEPS;
       const job = deps.repo.createJob({
         episodeId: episode.id,
-        pipeline: DASHBOARD_PIPELINE.id,
-        steps: DASHBOARD_STEPS,
+        pipeline: pipeline.id,
+        steps,
         // One key per run: a re-run of a canceled episode is a *new* job, and
         // stage fingerprints (not this key) are what make its stages reusable.
         idempotencyKey: `dash:${episode.id}:${existing.length + 1}`,
         maxAttempts: 3,
       });
       void redirectToEpisode(reply, id, {
-        notice: `pipeline started (job ${job.job.id.slice(0, 8)}…) — the worker picks it up within a second`,
+        notice: `${pipeline.label} started (job ${job.job.id.slice(0, 8)}…) — the worker picks it up within a second`,
       });
+    } catch (error) {
+      void redirectToEpisode(reply, id, { error: errorMessage(error) });
+    }
+  });
+
+  // ── create a short from a finished long-form episode ────────────────────
+  app.post("/episodes/:id/shorts", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const parent = deps.repo.requireEpisode(id);
+      if (parent.kind !== "long") {
+        redirectToEpisode(reply, id, { error: "only a long-form episode can be cut into shorts" });
+        return;
+      }
+      if (parent.state !== "READY") {
+        redirectToEpisode(reply, id, {
+          error:
+            "cutting a short requires the finished, approved episode — this one is " + parent.state,
+        });
+        return;
+      }
+      const child = deps.repo.createEpisode({
+        projectId: parent.project_id,
+        topic: `${parent.topic} — vertical short`,
+        kind: "short",
+        parentEpisodeId: parent.id,
+      });
+      void reply.redirect(
+        `/episodes/${child.id}?notice=${encodeURIComponent("short episode created — start it when ready")}`,
+        303,
+      );
     } catch (error) {
       void redirectToEpisode(reply, id, { error: errorMessage(error) });
     }
@@ -607,6 +644,7 @@ export async function buildApp(
           qaVerdict !== null &&
           qaVerdict !== "fail" &&
           hashes.video !== null,
+        canCreateShort: episode.kind === "long" && episode.state === "READY",
         ...(published !== null ? { published } : {}),
       }),
     );

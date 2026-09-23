@@ -298,6 +298,8 @@ export function episodePage(params: {
   readonly qaVerdict: string | null;
   /** The episode cleared the QA gate and is approved — the publish form shows. */
   readonly canPublish?: boolean;
+  /** A finished long-form episode can be cut into vertical shorts. */
+  readonly canCreateShort?: boolean;
   /** The episode's latest successful publish, when there is one. */
   readonly published?: {
     readonly url: string | null;
@@ -351,7 +353,11 @@ export function episodePage(params: {
     notStarted || job?.state === "CANCELED"
       ? `<form method="post" action="/episodes/${attr(episode.id)}/start">
       <button type="submit">${notStarted ? "Start pipeline" : "Start a new run"}</button>
-      <span class="meta"> runs ${attr(episode.kind === "long" ? "longform_v1" : "shorts_v1")} — research → script → plan → media → voice → captions → render → QA → your approval; publishing is a separate, explicit step afterwards</span>
+      <span class="meta"> runs ${attr(episode.kind === "long" ? "longform_v1" : "shorts_v1")} — ${
+        episode.kind === "long"
+          ? "research → script → plan → media → voice → captions → render → QA → your approval; publishing is a separate, explicit step afterwards"
+          : "transcript/timeline → candidates → script → 9:16 layout → render → QA → your approval"
+      }</span>
     </form>`
       : "";
 
@@ -477,6 +483,17 @@ ${gatePanel}
 ${retryPanel}
 ${startForm}
 ${qaLine}
+${
+  params.canCreateShort === true
+    ? `<div class="panel">
+  <h2 style="margin-top:0">Cut into shorts</h2>
+  <p class="meta">Creates a child episode that selects a standalone highlight span, re-composes it for 9:16, renders it with the same engines, and parks it at your approval. Publishing stays out.</p>
+  <form method="post" action="/episodes/${attr(episode.id)}/shorts">
+    <button type="submit">Create short episode</button>
+  </form>
+</div>`
+    : ""
+}
 ${publishPanel}
 ${stageTable}
 ${logTable}

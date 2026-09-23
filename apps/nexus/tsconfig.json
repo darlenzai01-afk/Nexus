@@ -45,6 +45,9 @@
     },
     {
       "path": "../../packages/qa"
+    },
+    {
+      "path": "../../packages/shorts"
     }
   ]
 }

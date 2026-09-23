@@ -35,6 +35,17 @@ import {
   createSourceMediaTask,
   fingerprintParams,
 } from "./pipeline.js";
+import { VERTICAL_CANVAS } from "@nexus/shorts";
+import {
+  SHORTS_DASHBOARD_PIPELINE,
+  createShortAnalyzeTask,
+  createShortApprovalTask,
+  createShortLayoutTask,
+  createShortQATask,
+  createShortRenderTask,
+  createShortRewriteTask,
+  createShortSelectTask,
+} from "./shorts-pipeline.js";
 import { openRuntime, type Runtime } from "./runtime.js";
 
 /**
@@ -61,6 +72,13 @@ export interface PipelineWorkerOptions {
    * binary, tests inject the scripted one. Same seam as `RenderTaskDeps.ffmpeg`.
    */
   readonly ffmpeg?: FFmpegRunner;
+  /**
+   * An FFmpeg runner for the VERTICAL render (short_render). One real binary
+   * encodes any resolution, so production leaves this unset; the scripted
+   * test double stamps its configured frame size into the file, so tests
+   * inject a 9:16 instance to match the vertical canvas.
+   */
+  readonly shortFfmpeg?: FFmpegRunner;
 }
 
 export interface PipelineWorker {
@@ -136,10 +154,40 @@ export function createPipelineWorker(
       publisher: providers.publishing(),
       stageKey: "short_publish",
     }),
+    // ── the shorts pipeline: long video → transcript → candidates → script →
+    // 9:16 layout → render → QA → SHORT_APPROVAL. The vertical canvas is the
+    // the platform's vertical canvas (the plan is DESIGNED at 1080×1920 — the
+    // readability/layout QA floors assume that geometry), and the vertical
+    // render/QA are the same engines with the short pipeline's upstream names
+    // mapped onto the ones they read.
+    createShortAnalyzeTask({ storage, repo }),
+    createShortSelectTask({ storage, repo }),
+    createShortRewriteTask({ storage, repo }),
+    createShortLayoutTask({ storage, repo, canvas: { ...VERTICAL_CANVAS } }),
+    createShortRenderTask({
+      storage,
+      repo,
+      config: {
+        ...config.render,
+        width: VERTICAL_CANVAS.width,
+        height: VERTICAL_CANVAS.height,
+        captions: "none",
+      },
+      ...(options.shortFfmpeg !== undefined ? { ffmpeg: options.shortFfmpeg } : {}),
+    }),
+    createShortQATask({
+      storage,
+      repo,
+      characters,
+      ...(fonts !== undefined ? { fonts } : {}),
+      settings: resolveQASettings(config.qa),
+    }),
+    createShortApprovalTask(),
   ]);
-  // A dashboard job declares exactly this step list; anything the registry
+  // A dashboard job declares exactly these step lists; anything the registry
   // cannot execute must fail here, not after a job is claimed.
   registry.assertCovers(DASHBOARD_PIPELINE);
+  registry.assertCovers(SHORTS_DASHBOARD_PIPELINE);
 
   const worker = new JobWorker({
     repo,

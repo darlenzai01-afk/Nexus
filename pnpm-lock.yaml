@@ -68,6 +68,9 @@ importers:
       '@nexus/script':
         specifier: workspace:*
         version: link:../../packages/script
+      '@nexus/shorts':
+        specifier: workspace:*
+        version: link:../../packages/shorts
       '@nexus/storage':
         specifier: workspace:*
         version: link:../../packages/storage

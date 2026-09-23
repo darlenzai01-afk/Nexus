@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import type { AudioTrack } from "@nexus/audio";
+
 import { SCENE_TYPE_SPECS, validateSceneManifest } from "@nexus/scenes";
 
 import { fixtureEpisode } from "./fixtures.js";
@@ -108,6 +110,74 @@ describe("vertical reflow", () => {
     );
     // The rebased track carries a warning about the rebase.
     expect(reflow.track.warnings.join(" ")).toMatch(/rebased/u);
+  });
+
+  it("re-times animation events into the re-timed scene, when speech runs shorter than the plan", async () => {
+    const { manifest, track } = await fixtureEpisode();
+    const round1 = (value: number): number => Math.round(value * 10) / 10;
+    const plan = selectShorts({ manifest, track });
+    const candidate = plan.candidates[0]!;
+    // Speech that lands well under its planned window (the voice read faster
+    // than the plan's estimate): the diagram scene speaks at 40% of the plan.
+    const victim = manifest.scenes.find((scene) => scene.id === "scn_intro")!;
+    const factor = 0.4;
+    const faster: AudioTrack = {
+      ...track,
+      segments: track.segments.map((segment) =>
+        segment.sceneId === victim.id
+          ? {
+              ...segment,
+              durationSec: round1(segment.durationSec * factor),
+              audio: {
+                ...segment.audio,
+                durationMs: Math.round(segment.audio.durationMs * factor),
+              },
+              wordTimings: segment.wordTimings?.map((timing) => ({
+                ...timing,
+                startMs: Math.round(timing.startMs * factor),
+                endMs: Math.round(timing.endMs * factor),
+              })),
+            }
+          : segment,
+      ),
+      sentences: track.sentences.map((timing) =>
+        timing.sceneId === victim.id
+          ? {
+              ...timing,
+              startSec: round1(timing.startSec * factor),
+              endSec: round1(timing.endSec * factor),
+              durationSec: round1(timing.durationSec * factor),
+            }
+          : timing,
+      ),
+      scenes: track.scenes.map((timing) =>
+        timing.sceneId === victim.id
+          ? {
+              ...timing,
+              plannedDurationSec: round1(timing.plannedDurationSec * factor),
+              spokenDurationSec: round1(timing.spokenDurationSec * factor),
+            }
+          : timing,
+      ),
+    };
+
+    const reflow = verticalReflow({ manifest, track: faster, candidate });
+    const scene = reflow.manifest.scenes.find((entry) => entry.id === victim.id)!;
+    // The scene re-timed to its speech…
+    expect(scene.durationSec).toBeLessThan(victim.durationSec);
+    // …and every animation event moved into the shorter scene, still ordered.
+    let previous = -1;
+    for (const event of scene.animation) {
+      expect(event.atSec).toBeGreaterThanOrEqual(previous);
+      previous = event.atSec;
+      expect(
+        event.atSec + event.durationSec,
+        `${event.id} inside the re-timed scene`,
+      ).toBeLessThanOrEqual(scene.durationSec + 0.05);
+    }
+    // The reflowed manifest is still a fully valid plan.
+    const report = validateSceneManifest(reflow.manifest);
+    expect(report.ok).toBe(true);
   });
 
   it("stamps the vertical manifest hash with withManifestHash", async () => {

@@ -294,7 +294,7 @@ function textElement(context: FrameContext, text: SceneText): TextElement {
     foldAnimation(events, context.localSec, "text", context.resolution),
   );
   const rect = textRect(text, context.resolution);
-  const baseSize = TEXT_STYLE[text.kind].sizeFactor * context.resolution.height;
+  const baseSize = TEXT_STYLE[text.kind].sizeFactor * context.resolution.height * text.sizeScale;
 
   let value = text.value;
   if (anim.countUp !== null) {

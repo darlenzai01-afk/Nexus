@@ -294,6 +294,12 @@ export const SceneTextSchema = z.strictObject({
   attribution: z.string().max(200).default(""),
   position: SceneTextPositionSchema.default("lower_third"),
   maxLines: z.number().int().min(1).max(6).default(2),
+  /**
+   * Multiplier on the compositor's size for this kind of text (1 = the normal
+   * height-derived size). The vertical reflow sets it below 1: type sized for
+   * a 16:9 frame's height is far too large for a 9:16 frame's width.
+   */
+  sizeScale: z.number().min(0.1).max(1).default(1),
 });
 export type SceneText = z.infer<typeof SceneTextSchema>;
 

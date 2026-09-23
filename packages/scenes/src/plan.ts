@@ -371,6 +371,7 @@ function textFor(
         attribution,
         position: "center",
         maxLines: 4,
+        sizeScale: 1,
       };
     }
     if (first !== undefined) {
@@ -380,6 +381,7 @@ function textFor(
         attribution,
         position: "center",
         maxLines: 3,
+        sizeScale: 1,
       };
     }
     return {
@@ -388,6 +390,7 @@ function textFor(
       attribution,
       position: "center",
       maxLines: 2,
+      sizeScale: 1,
     };
   }
 
@@ -399,6 +402,7 @@ function textFor(
         attribution,
         position: "lower_third",
         maxLines: 2,
+        sizeScale: 1,
       };
     }
     return {
@@ -407,6 +411,7 @@ function textFor(
       attribution: "",
       position: "lower_third",
       maxLines: 1,
+      sizeScale: 1,
     };
   }
 

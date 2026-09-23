@@ -26,6 +26,7 @@
     "@nexus/research": "workspace:*",
     "@nexus/scenes": "workspace:*",
     "@nexus/script": "workspace:*",
+    "@nexus/shorts": "workspace:*",
     "@nexus/storage": "workspace:*",
     "@nexus/video": "workspace:*",
     "fastify": "^5.0.0"

@@ -23,6 +23,7 @@ const text = (overrides: Partial<SceneText> = {}): SceneText => ({
   attribution: "",
   position: "lower_third",
   maxLines: 2,
+  sizeScale: 1,
   ...overrides,
 });
 

@@ -135,6 +135,7 @@ export async function fixtureEpisode(): Promise<FixtureEpisode> {
         attribution: "the 1991 report",
         position: "corner",
         maxLines: 2,
+        sizeScale: 1,
       },
       sources: [
         {

@@ -167,6 +167,12 @@ export interface ReflowOptions {
   readonly canvas?: { readonly width: number; readonly height: number };
   /** The hash the re-based track should record (the persisted vertical manifest's). */
   readonly manifestHash?: string;
+  /**
+   * The SHORT's own script (a scoped condensation of the parent's), so QA's
+   * plan↔script cross-reference binds to the document the short was built
+   * from. Defaults to the source manifest's script hash.
+   */
+  readonly scriptHash?: string;
   readonly now?: string;
 }
 
@@ -234,12 +240,21 @@ export function verticalReflow(input: ReflowInput, options: ReflowOptions = {}):
     });
 
     // Text, media, diagram reflow — expressed on the scene the renderer reads.
+    // The compositor derives type size from the frame's HEIGHT; in 9:16 that
+    // makes 16:9-sized text far too wide for the narrow frame, so the reflow
+    // scales it by the width ratio over the height ratio (never enlarging),
+    // which preserves the long form's fit while staying readable.
+    const sizeScale = Math.min(
+      1,
+      round3((canvas.width * source.resolution.height) / (canvas.height * source.resolution.width)),
+    );
     const text = scene.text;
     const verticalText = text
       ? {
           ...text,
           position: TEXT_POSITION_REFLOW[text.position] ?? text.position,
           maxLines: Math.min(6, text.maxLines + 1),
+          sizeScale,
         }
       : undefined;
     const verticalMedia = scene.media
@@ -256,9 +271,11 @@ export function verticalReflow(input: ReflowInput, options: ReflowOptions = {}):
         sceneLayout.text = {
           position: verticalText!.position,
           ...(textMoved ? { previousPosition: text.position } : {}),
-          reason: textMoved
-            ? `"${text.position}" hugs the wide frame's edge — it moves to "${verticalText!.position}"; the narrow frame gains a line`
-            : `"${text.position}" reads the same in a tall frame; the box gains a line`,
+          reason:
+            (textMoved
+              ? `"${text.position}" hugs the wide frame's edge — it moves to "${verticalText!.position}"; the narrow frame gains a line`
+              : `"${text.position}" reads the same in a tall frame; the box gains a line`) +
+            (sizeScale < 0.99 ? `; type scaled ×${sizeScale} to the frame's width` : ""),
         };
       }
       if (scene.media !== undefined && verticalMedia !== undefined) {
@@ -279,11 +296,29 @@ export function verticalReflow(input: ReflowInput, options: ReflowOptions = {}):
       }
     }
 
+    // The speech re-times the scene, so the animation events are re-timed
+    // with it: the same events, uniformly scaled into the new length, still
+    // ordered and still ending inside the scene (the validator enforces both).
+    const animationScale = scene.durationSec > 0 ? durationSec / scene.durationSec : 1;
+    const animation = scene.animation.map((event) => {
+      const atSec = round3(event.atSec * animationScale);
+      const eventDuration = round3(
+        Math.min(event.durationSec * animationScale, Math.max(0.1, durationSec - atSec)),
+      );
+      return { ...event, atSec, durationSec: eventDuration };
+    });
+    if (animationScale < 0.99 || animationScale > 1.01) {
+      sceneLayouts[sceneLayouts.length - 1]?.notes.push(
+        `animation re-timed ×${round3(animationScale)} to the spoken length`,
+      );
+    }
+
     verticalScenes.push({
       ...scene,
       index: verticalScenes.length,
       startSec: round1(cursor),
       durationSec,
+      animation,
       camera: { ...scene.camera, shot: targetShot },
       text: verticalText,
       media: verticalMedia,
@@ -317,6 +352,7 @@ export function verticalReflow(input: ReflowInput, options: ReflowOptions = {}):
 
   const verticalManifestInput = {
     ...source,
+    ...(options.scriptHash !== undefined ? { scriptHash: options.scriptHash } : {}),
     generatedAt: now,
     aspect: "9:16" as const,
     resolution: { ...canvas },
