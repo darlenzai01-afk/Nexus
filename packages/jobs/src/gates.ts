@@ -139,7 +139,9 @@ export function resolveGate(repo: Repo, jobId: string, input: ResolveGateInput):
   }
 
   assertJobTransition(repo.requireJob(jobId).state, "PENDING");
-  repo.setJobState(jobId, "PENDING");
+  // The operator's decision must be claimable immediately: a stale backoff
+  // window from the failed attempts would silently delay the rewind.
+  repo.setJobState(jobId, "PENDING", { resetRetry: true });
   return {
     jobId,
     gate,
@@ -157,7 +159,10 @@ export function retryFailedJob(repo: Repo, jobId: string): void {
     throw new ConfigurationError(`Job ${jobId} is ${job.state}; only FAILED jobs can be retried.`);
   }
   assertJobTransition(job.state, "PENDING");
-  repo.setJobState(jobId, "PENDING");
+  // The operator's decision must be claimable immediately: a stale backoff
+  // window from the failed attempts would silently delay (or, for the worker
+  // loop, appear to ignore) the retry.
+  repo.setJobState(jobId, "PENDING", { resetRetry: true });
   const episode = repo.requireEpisode(job.episode_id);
   if (episode.state === "FAILED") {
     // FAILED → the failed stage's own state is legal; the runner re-enters it.

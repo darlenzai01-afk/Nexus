@@ -38,6 +38,18 @@ export async function runJob(deps: RunnerDeps, jobId: string): Promise<RunJobOut
     return { status: "skipped", jobId: job.id, reason: `job is ${job.state}` };
   }
 
+  // A FAILED job is a *decision*, not a resume point: the operator retries it
+  // (which moves it back to PENDING) or starts a new run that adopts its
+  // completed stages. Executing one in place would bypass the attempt
+  // bookkeeping and die on the FAILED → DONE transition mid-run.
+  if (job.state === "FAILED") {
+    return {
+      status: "skipped",
+      jobId: job.id,
+      reason: "job is FAILED — retry it or start a new run",
+    };
+  }
+
   // Attempts are counted per claim: a job that comes back after its ceiling was
   // already reached (requeued, then the process died) fails here rather than
   // burning another attempt.

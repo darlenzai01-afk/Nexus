@@ -36,12 +36,23 @@ export function sha256(data: Uint8Array): string {
  * Dedupe and integrity come free (AD-09). Writes go through a temp file +
  * rename so partially-written blobs are never visible under their hash.
  */
+/** Artifact addresses are sha-256 hex — anything else is not a hash. */
+function isArtifactHash(hash: string): boolean {
+  return /^[0-9a-f]{64}$/u.test(hash);
+}
+
 export class CasStore implements BlobStore {
   constructor(private readonly root: string) {
     mkdirSync(root, { recursive: true });
   }
 
   pathFor(hash: string): string {
+    // Every caller reaches the disk through here, so this is the one place a
+    // malformed "hash" could escape the store (path traversal) or read another
+    // shard. Artifact hashes are sha-256 hex, always.
+    if (!/^[0-9a-f]{64}$/u.test(hash)) {
+      throw new Error(`CAS: "${hash.slice(0, 24)}" is not a sha-256 artifact hash`);
+    }
     return path.join(this.root, hash.slice(0, 2), hash);
   }
 
@@ -63,17 +74,19 @@ export class CasStore implements BlobStore {
   }
 
   has(hash: string): boolean {
+    if (!isArtifactHash(hash)) return false;
     return existsSync(this.pathFor(hash));
   }
 
   getPath(hash: string): string | undefined {
+    if (!isArtifactHash(hash)) return undefined;
     const p = this.pathFor(hash);
     return existsSync(p) ? p : undefined;
   }
 
   read(hash: string): Uint8Array {
     const p = this.getPath(hash);
-    if (!p) throw new Error(`CAS: blob not found for hash ${hash}`);
+    if (!p) throw new Error(`CAS: blob not found for hash ${hash.slice(0, 24)}`);
     return readFileSync(p);
   }
 

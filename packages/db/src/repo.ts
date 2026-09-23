@@ -883,17 +883,22 @@ export class Repo {
   setJobState(
     id: string,
     state: JobState,
-    options: { error?: string | null; gate?: string | null } = {},
+    options: { error?: string | null; gate?: string | null; resetRetry?: boolean } = {},
   ): PipelineJobRow {
     this.requireJob(id);
     const next = validate(JobStateSchema, state, "job state");
     const clearLease =
       next === "DONE" || next === "FAILED" || next === "CANCELED" || next === "WAITING_GATE";
     // A scheduled retry only makes sense while PENDING; anything else clears it.
+    // `resetRetry` clears it for a PENDING job too: an operator decision (a
+    // retry, or a needs_changes rewind) must be claimable NOW, not when some
+    // stale backoff window happens to elapse.
+    const retryColumn =
+      next === "PENDING" && options.resetRetry !== true ? "next_attempt_at" : "NULL";
     this.db.run(
       `UPDATE pipeline_jobs
           SET state = ?, waiting_gate = ?, error = ?, updated_at = ?,
-              next_attempt_at = ${next === "PENDING" ? "next_attempt_at" : "NULL"}
+              next_attempt_at = ${retryColumn}
               ${clearLease ? ", lease_owner = NULL, lease_expires_at = NULL" : ""}
         WHERE id = ?;`,
       [next, options.gate ?? null, options.error ?? null, nowIso(), id],
