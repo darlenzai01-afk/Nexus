@@ -1,0 +1,148 @@
+# Render one dispatched video, off the operator's machine.
+#
+# Dispatched by `createGithubActionsBackend` (`packages/video/src/github-runner.ts`),
+# which sends the render key and the base64 bundle as `workflow_dispatch` inputs and
+# then waits for this run to finish. Nothing triggers it by hand.
+#
+# Three things here are load-bearing and would be easy to "simplify" into something
+# broken:
+#
+# 1. **The run's title carries the full render key.** The caller matches on it, exactly,
+#   and never on "the most recent run" — two workers retrying one render would otherwise
+#   adopt each other's results. The title is set below from `inputs.render_key`.
+# 2. **Ten inputs, nine of them bundle chunks.** `workflow_dispatch` allows ten top-level
+#   inputs of at most 65,535 characters each. `chunkBundle` splits the archive to fit and
+#   sends the piece count in `bundle_chunks`, so the count and the data can disagree and
+#   be caught.
+# 3. **The result is uploaded as `render-result`,** which is the name the caller looks
+#   for. A run that succeeds but publishes a differently-named artifact is treated as a
+#   failure rather than as a render, deliberately.
+name: nexus-render
+
+on:
+  workflow_dispatch:
+    inputs:
+      render_key:
+        description: The full 64-character render key. Becomes the run's title.
+        required: true
+        type: string
+      bundle_chunks:
+        description: How many bundle_NN inputs follow. Checked against what arrived.
+        required: true
+        type: string
+      bundle_01:
+        description: Bundle archive, base64, chunk 1 of up to 9.
+        type: string
+      bundle_02:
+        description: Bundle archive, base64, chunk 2.
+        type: string
+      bundle_03:
+        description: Bundle archive, base64, chunk 3.
+        type: string
+      bundle_04:
+        description: Bundle archive, base64, chunk 4.
+        type: string
+      bundle_05:
+        description: Bundle archive, base64, chunk 5.
+        type: string
+      bundle_06:
+        description: Bundle archive, base64, chunk 6.
+        type: string
+      bundle_07:
+        description: Bundle archive, base64, chunk 7.
+        type: string
+      bundle_08:
+        description: Bundle archive, base64, chunk 8.
+        type: string
+      bundle_09:
+        description: Bundle archive, base64, chunk 9.
+        type: string
+
+# GitHub names a `workflow_dispatch` run after the workflow, its ref and its id. The
+# caller reads `display_title`, so it has to carry the render key instead.
+run-name: nexus-render ${{ inputs.render_key }}
+
+# No trigger other than dispatch. `workflow_dispatch` is the only key present on
+# purpose: a `push` trigger here would run a render on every commit, with no bundle to
+# read, and bill the account for the privilege.
+permissions:
+  contents: read
+
+# Generous, because this *is* the render: a full-length episode is hundreds of frames of
+# CPU rasterisation followed by an encode, and the caller's default deadline is an hour.
+timeout-minutes: 60
+
+# One render per run. Concurrency here would cancel a render mid-encode and produce a
+# `cancelled` conclusion, which the caller reads as a retryable failure and dispatches
+# again — spending minutes to arrive at the same place. The caller's own deadline governs
+# how long to wait, and a render it gave up on keeps running only until GitHub's own
+# limit, which is what makes "it may still finish on GitHub" in the timeout message true.
+concurrency:
+  group: nexus-render-${{ inputs.render_key }}
+  cancel-in-progress: false
+
+jobs:
+  render:
+    name: Render ${{ inputs.render_key }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # FFmpeg is on the runner image, but the pipeline refuses to guess: it names the
+      # path it tried. Naming it here means the toolchain recorded in the render
+      # metadata is the one that was configured, and a runner image without FFmpeg fails
+      # with one clear line rather than inside an encode.
+      - name: Check FFmpeg
+        run: |
+          set -euo pipefail
+          ffmpeg -version | head -1
+          ffprobe -version | head -1
+          echo "NEXUS_RENDER_FFMPEG=$(command -v ffmpeg)" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Built rather than run from source: the worker imports the packages by name, and
+      # `@nexus/video`'s exports point at `dist`. The build is also the typecheck, so a
+      # worker that would not have run never starts burning minutes.
+      - name: Build
+        run: pnpm build
+
+      # The render. Everything else in this file is bookkeeping around it.
+      #
+      # `--out` is the artifact's staging path and `--work`/`--cas` are scratch, all
+      # under the workspace so a failed run's disk is reclaimed with the runner.
+      - name: Render
+        run: |
+          set -euo pipefail
+          node packages/video/tools/render-dispatched.mjs \
+            --out "$RUNNER_TEMP/render-result" \
+            --work "$RUNNER_TEMP/render-work" \
+            --cas "$RUNNER_TEMP/render-cas"
+
+      # Success-only, deliberately. A failed render has no result to publish, and the
+      # caller's response to that is the run's conclusion plus its log URL — which is
+      # where the reason is. Uploading with `if-no-files-found: error` under
+      # `if: always()` would add a second, less informative failure to every failed
+      # render and bury the first.
+      #
+      # The artifact's name is the contract with the caller: `fetchResult` looks for
+      # exactly this, and a run that succeeds without it is treated as a failure rather
+      # than as a render.
+      - name: Upload the result
+        uses: actions/upload-artifact@v4
+        with:
+          name: render-result
+          path: ${{ runner.temp }}/render-result
+          if-no-files-found: error
+          retention-days: 7
